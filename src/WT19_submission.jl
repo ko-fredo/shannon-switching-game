@@ -1,33 +1,13 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wettbewerbs-Strategie für den comajudge – Shannon-Switching (gewichtetes Spiel)
-# Team WT19
-#
-# Abgeben mit:   comajudge submit -t src/WT19_submission.jl -p Shannon
-# Ergebnis mit:  comajudge result -p Shannon
-#
-# Diese Datei ist EIGENSTÄNDIG: Sie enthält nur die Wettbewerbsstrategie
-# (weighted_short / weighted_cut), TEAM_NAME und alle benötigten Hilfsfunktionen.
-# Die Datenstrukturen (Vertex, Edge, GameGraph, GameState) stellt der comajudge
-# bereit (Aufgaben-PDF, Abschnitt 5.3). Genau deshalb hat die Datei ihre eigenen
-# kleinen Helfer (alle mit `_wt_` benannt) und hängt nicht an game.jl/strategy.jl.
-#
-# Idee der Heuristik (für beide Spieler dieselbe Größe): die Kosten des aktuell
-# günstigsten s-t-Wegs (gesicherte Short-Kanten kosten 0, entfernte sind unbenutzbar).
-#   * Short sichert die "Engpass-Kante" – deren Verlust den Weg am meisten verteuert.
-#   * Cut entfernt genau diese Engpass-Kante.
-# ═══════════════════════════════════════════════════════════════════════════════
 
 const TEAM_NAME = "WT19"
 
 
-# ── Eigenständige Hilfsfunktionen (nur Zugriff auf die Datenstrukturen) ────────
+# Hilfsfunktionen
 
-# Alle neutralen (= noch wählbaren) Kanten.
-_wt_neutral_edges(state::GameState) = [e for e in state.graph.edges if e.state == :neutral]
+_wt_neutral_edges(state::GameState) = [e for e in state.graph.edges if e.state == :neutral] # alle neutralen kanten
 
-# Adjazenzliste über "erlaubte" Kanten. `allowed` bekommt den Kantenzustand
-# (:neutral/:short/:cut) und gibt true/false zurück. Eintrag: (Nachbar, Kanten-Index).
-function _wt_adj(g::GameGraph, allowed::Function)
+
+function _wt_adj(g::GameGraph, allowed::Function) # genau das gleiche wie in game.jl
     d = Dict{Int,Vector{Tuple{Int,Int}}}()
     for v in g.vertices
         d[v.id] = Tuple{Int,Int}[]
@@ -41,8 +21,8 @@ function _wt_adj(g::GameGraph, allowed::Function)
     return d
 end
 
-# Gibt es einen Weg from→to über erlaubte Kanten? (Breitensuche)
-function _wt_path_exists(g::GameGraph, from::Int, to::Int, allowed::Function)::Bool
+
+function _wt_path_exists(g::GameGraph, from::Int, to::Int, allowed::Function)::Bool # wie game.jl
     from == to && return true
     adj  = _wt_adj(g, allowed)
     seen = Set{Int}([from]); queue = Int[from]
@@ -91,30 +71,29 @@ function _wt_cheapest_path(g::GameGraph)
     return path
 end
 
-# Kosten des günstigsten s-t-Wegs (Inf, falls s und t nicht verbunden werden können).
-function _wt_cheapest_path_weight(g::GameGraph)
+
+function _wt_cheapest_path_weight(g::GameGraph) # kosten des günstigsten s-t-wegs
     path = _wt_cheapest_path(g)
     isempty(path) && return (g.s.id == g.t.id ? 0.0 : Inf)
     return sum(g.edges[i].state == :short ? 0.0 : g.edges[i].weight for i in path; init = 0.0)
 end
 
-# Würde das Sichern von Kante e sofort einen s-t-Weg aus lauter Short-Kanten schließen?
-function _wt_completes_short_path(g::GameGraph, e::Edge)
-    e.state == :neutral || return false
-    e.state = :short
+
+function _wt_completes_short_path(g::GameGraph, e::Edge) # guckt ob mit dem spielen von e ein weg gefunden worden ist
+    e.state == :neutral || return false # nur wenn e neutral
+    e.state = :short 
     ok = _wt_path_exists(g, g.s.id, g.t.id, s -> s == :short)
     e.state = :neutral
     return ok
 end
 
 
-# ── Wettbewerbsstrategie ──────────────────────────────────────────────────────
+# Wettbewerbsstrategie
 
 """
-    weighted_short(state::GameState) -> Edge
+    weighted_short(state::GameState)::Edge
 
-Sichert auf dem günstigsten s-t-Weg die Engpass-Kante (deren Verlust den Weg am
-stärksten verteuern würde).
+sichert auf dem günstigstem s-t-weg die Kante, deren Verlust den Weg am stärksten verteuern würde.
 """
 function weighted_short(state::GameState)::Edge
     g     = state.graph
