@@ -4,7 +4,15 @@
       "Bash(julia --version)",
       "Bash(julia test/runtests.jl)",
       "Bash(julia -e ' *)",
-      "Bash(timeout 540 julia --project=. -e ' *)"
+      "Bash(timeout 540 julia --project=. -e ' *)",
+      "Bash(timeout 300 julia --project=. -e ' *)",
+      "Bash(gh auth *)",
+      "Bash(git config *)",
+      "Bash(git --no-pager diff src/gui.jl)",
+      "Bash(git --no-pager diff .claude/settings.local.json)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

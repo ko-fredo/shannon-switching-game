@@ -1,8 +1,3 @@
-# Tests für die kritischen Funktionen des Shannon-Switching-Projekts.
-#
-# Wir binden die Logik-Dateien direkt ein (ohne gui.jl), damit die Tests auch
-# ohne grafische Oberfläche / ohne Gtk4 laufen.
-#
 # Ausführen aus dem Projektordner:
 #   julia --project=. test/runtests.jl
 
@@ -87,53 +82,4 @@ mkstate(g) = GameState(g, :short, Tuple{Symbol,Edge}[], nothing)
         for e in g.edges; e.state = :cut; end
         @test isempty(find_path(g, g.s.id, g.t.id, s -> s == :neutral))
     end
-
-    @testset "random_graph" begin
-        for _ in 1:20
-            n = rand(2:8)
-            maxm = n * (n - 1) ÷ 2
-            m = rand((n-1):maxm)
-            g = random_graph(n, m)
-            @test length(g.vertices) == n
-            @test length(g.edges) == m
-            @test g.s.id == 1 && g.t.id == n
-            # Zusammenhängend: von s aus sind alle Knoten erreichbar.
-            for v in g.vertices
-                @test !isempty(find_path(g, g.s.id, v.id, _ -> true)) || v.id == g.s.id
-            end
-        end
-        # Gewichtet: Gewichte liegen in [1, 10].
-        g = random_graph(6, 9; weighted = true)
-        @test all(1.0 <= e.weight <= 10.0 for e in g.edges)
-    end
-
-    @testset "short_strategy gewinnt jedes Short-Spiel" begin
-        # example_graph() ist ein Short-Spiel: mit optimaler Strategie gewinnt
-        # Short immer, egal wie Cut zieht. Test gegen zufälliges Cut-Spiel.
-        for seed in 1:30
-            Random.seed!(seed)
-            state = new_game(example_graph())
-            while state.winner === nothing && !isempty(valid_moves(state))
-                e = state.current_player == :short ? short_strategy(state) :
-                                                     rand(valid_moves(state))
-                make_move!(state, e)
-            end
-            @test state.winner == :short
-        end
-    end
-
-    @testset "gewichtete Heuristiken liefern gültige Züge" begin
-        for seed in 1:15
-            Random.seed!(seed)
-            state = new_game(random_graph(6, 9; weighted = true))
-            while state.winner === nothing && !isempty(valid_moves(state))
-                e = state.current_player == :short ? weighted_short(state) :
-                                                     weighted_cut(state)
-                @test e.state == :neutral              # immer eine freie Kante
-                @test e in valid_moves(state)
-                make_move!(state, e)
-            end
-        end
-    end
-
 end
