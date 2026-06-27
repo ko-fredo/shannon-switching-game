@@ -1,29 +1,25 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# Shannon-Switching-Spiel – Computerstrategien
+# _____________________________________________________________________________
+# Shannon-Switching-Spiel – Strategien
 # TU Berlin, CoMa II, SoSe 2026
 #
 #   short_strategy                 – optimale Strategie für Short (klassisches Spiel)
-#   weighted_short / weighted_cut  – Heuristiken für den Wettbewerb (Teil 5)
+#   weighted_short / weighted_cut  – Strategie für den Wettbewerb
 #
-# Hinweis: Eine optimale Cut-Strategie für das klassische Spiel ist laut Aufgabe
-# nicht verpflichtend und wird hier bewusst NICHT implementiert.
-#
-# Voraussetzung: Die Datenstrukturen (Vertex, Edge, GameGraph, GameState) sowie
-# valid_moves, path_exists und adjacency_list sind in game.jl definiert.
-# ═══════════════════════════════════════════════════════════════════════════════
+# Die Datenstrukturen (Vertex, Edge, GameGraph, GameState) sowie valid_moves, 
+# path_exists und adjacency_list sind in game.jl definiert.
+# ______________________________________________________________________________
 
 const TEAM_NAME = "WT19"
 
 include("union_find.jl")
 
-
-# ───────────────────────────────────────────────────────────────────────────────
-# Kleiner Helfer: einen Weg als Liste von Kanten-Indizes finden (Breitensuche/BFS)
-# ───────────────────────────────────────────────────────────────────────────────
+# _______________________________________________________________________________
 # Sucht einen Weg von Knoten `from` nach `to`, der nur über "erlaubte" Kanten läuft.
 # `allowed` ist eine Funktion, die den Zustand einer Kante (:neutral/:short/:cut)
 # bekommt und true/false zurückgibt. Rückgabe: Liste der benutzten Kanten-Indizes
 # (oder eine leere Liste, falls es keinen solchen Weg gibt).
+#________________________________________________________________________________
+
 function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{Int}
     adj = adjacency_list(g, allowed)            # Nachbarn je Knoten: (Nachbar, Kanten-Index)
 
