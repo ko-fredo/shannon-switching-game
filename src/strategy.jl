@@ -5,6 +5,10 @@
 #   short_strategy                 – optimale Strategie für Short (klassisches Spiel)
 #   weighted_short / weighted_cut  – Heuristiken für den Wettbewerb (Teil 5)
 #
+# Kern der Short-Strategie sind zwei kantendisjunkte Spannbäume, berechnet mit
+# dem Verfahren aus Anhang A der PDF (maximally_distant_trees! = Kishi-Kajitani,
+# augment_along_common_chord! = Augmentierung entlang einer gemeinsamen Sehne).
+#
 # Hinweis: Eine optimale Cut-Strategie für das klassische Spiel ist laut Aufgabe
 # nicht verpflichtend und wird hier bewusst NICHT implementiert.
 #
@@ -68,33 +72,41 @@ end
 # voneinander unabhängige "Reserve-Verbindungen". Egal welche Kante Cut entfernt,
 # Short kann mit der jeweils anderen reparieren.
 #
-# Um das zu prüfen, müssen wir zwei kantendisjunkte Bäume finden ("packen").
-# Das erledigen die folgenden Hilfsfunktionen.
+# Diese zwei kantendisjunkten Spannbäume berechnen wir GENAU mit dem Verfahren
+# aus Anhang A der Aufgaben-PDF:
+#   * maximally_distant_trees!   – Algorithmus 3 (Kishi-Kajitani)
+#   * augment_along_common_chord! – Algorithmus 4 (Augmentierung)
+# Man startet mit zwei beliebigen Spannbäumen und erhöht ihren "Abstand"
+# |T1\T2| Schritt für Schritt, bis er maximal ist. Besitzt der Graph zwei
+# kantendisjunkte Spannbäume, kommen am Ende genau solche heraus.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Liegen die Knoten a und b im selben Teilbaum von Wald `wald_nr`?  (via Union-Find)
-function _same_component(assign, edgelist, wald_nr, n, a, b)
-    a == b && return true
+# Baut einen Spannbaum (Menge von Kanten-Indizes) per Union-Find auf.
+# Rückgabe: die Kantenmenge, oder `nothing`, falls der Graph nicht zusammenhängt.
+function _spanning_tree(n, edgelist)::Union{Set{Int},Nothing}
     nodes = union_find([(i, [i]) for i in 1:n])
+    tree  = Set{Int}()
     for (i, (u, v)) in enumerate(edgelist)
-        assign[i] == wald_nr && union!(nodes[u], nodes[v])
-    end
-    return find_set!(nodes[a]).value == find_set!(nodes[b]).value
-end
-
-# Kanten-Indizes auf dem eindeutigen Weg von a nach b innerhalb von Wald `wald_nr`.
-# (Ein Baum/Wald hat zwischen zwei verbundenen Knoten genau einen Weg.)
-# Rückgabe: leere Liste, falls a und b im Wald nicht verbunden sind.
-function _path_in_forest(assign, edgelist, wald_nr, n, a, b)
-    # Adjazenzliste nur aus den Kanten dieses Waldes aufbauen.
-    adj = [Tuple{Int,Int}[] for _ in 1:n]
-    for (i, (u, v)) in enumerate(edgelist)
-        if assign[i] == wald_nr
-            push!(adj[u], (v, i)); push!(adj[v], (u, i))
+        if find_set!(nodes[u]).value != find_set!(nodes[v]).value
+            union!(nodes[u], nodes[v])
+            push!(tree, i)
         end
     end
+    return length(tree) == n - 1 ? tree : nothing
+end
 
-    # BFS von a nach b, Vorgänger merken.
+# Fundamentalkreis FC(chord, tree): Fügt man die Sehne `chord` zum Spannbaum
+# `tree` hinzu, entsteht genau ein Kreis. Zurückgegeben werden die BAUMKANTEN
+# auf diesem Kreis (= der eindeutige Baumweg zwischen den Endpunkten von `chord`).
+function fundamental_cycle(tree::Set{Int}, edgelist, n, chord::Int)::Vector{Int}
+    (a, b) = edgelist[chord]
+    adj = [Tuple{Int,Int}[] for _ in 1:n]
+    for i in tree
+        (u, v) = edgelist[i]
+        push!(adj[u], (v, i)); push!(adj[v], (u, i))
+    end
+
+    # BFS von a nach b im Baum, Vorgänger merken.
     prev = Dict{Int,Tuple{Int,Int}}()
     seen = falses(n); seen[a] = true
     queue = [a]
@@ -105,10 +117,8 @@ function _path_in_forest(assign, edgelist, wald_nr, n, a, b)
             seen[y] || (seen[y] = true; prev[y] = (x, i); push!(queue, y))
         end
     end
-
     haskey(prev, b) || return Int[]
 
-    # Weg von b nach a rückwärts rekonstruieren.
     path, cur = Int[], b
     while cur != a
         p, i = prev[cur]; push!(path, i); cur = p
@@ -116,61 +126,97 @@ function _path_in_forest(assign, edgelist, wald_nr, n, a, b)
     return path
 end
 
-# Versucht, Kante e0 in einen der beiden Wälder einzufügen – notfalls per Kette
-# von Tausch-Operationen (das ist der Kern des "Matroid-Union"-Algorithmus).
-# Idee: Eine BFS, deren "Knoten" Paare (Kante, Wald) sind. Gibt true zurück,
-# falls die Einfügung gelungen ist.
-function _place!(assign, fixed, edgelist, n, e0)
-    from  = Dict{Tuple{Int,Int}, Union{Nothing,Tuple{Int,Int}}}()
-    queue = Tuple{Int,Int}[]
-    for wald in (1, 2)
-        from[(e0, wald)] = nothing
-        push!(queue, (e0, wald))
+# Algorithmus 4 (PDF): Augmentierung entlang einer gemeinsamen Sehne.
+# `e` ist eine "gemeinsame Sehne" (liegt in keinem der beiden Bäume). Die Funktion
+# sucht eine alternierende Tauschkette c1, c2, …, f (abwechselnd aus T1 und T2),
+# die bei einer GEMEINSAMEN Baumkante f endet, und führt den Tausch aus. Dadurch
+# steigt der Abstand |T1\T2| um genau 1. Rückgabe: true, falls ein Tausch gelang.
+function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, edgelist, n, e::Int)
+    par = Dict{Int,Int}()                 # Kante -> Vorgängerkante in der Suche
+    entdeckt = Set{Int}()                 # bereits besuchte Kanten
+
+    # Schicht 1: L¹ = FC(e, T1) – das sind Kanten aus T1.
+    schicht = Int[]
+    for f in fundamental_cycle(T1, edgelist, n, e)
+        push!(schicht, f); push!(entdeckt, f)
     end
 
-    ziel = nothing
-    while !isempty(queue)
-        (kante, wald) = popfirst!(queue)
-        (u, v)        = edgelist[kante]
-
-        if !_same_component(assign, edgelist, wald, n, u, v)
-            ziel = (kante, wald); break        # kein Kreis → Kante passt direkt rein
+    k = 1
+    while !isempty(schicht)
+        # In Schicht k liegen Kanten des einen Baums; "andererbaum" ist der jeweils
+        # andere. Liegt eine Schichtkante auch im anderen Baum, ist sie gemeinsam
+        # → Endpunkt f der Tauschkette gefunden.
+        andererbaum = isodd(k) ? T2 : T1
+        f = 0
+        for c in schicht
+            if c in andererbaum
+                f = c; break
+            end
         end
 
-        # Kante würde einen Kreis bilden → Kanten auf dem Kreis als Tausch-Kandidaten.
-        anderer = wald == 1 ? 2 : 1
-        for g in _path_in_forest(assign, edgelist, wald, n, u, v)
-            fixed[g] && continue
-            if !haskey(from, (g, anderer))
-                from[(g, anderer)] = (kante, wald)
-                push!(queue, (g, anderer))
+        if f != 0
+            # Kette von f über die Vorgänger zurück bis zur Wurzel (Schicht 1).
+            chain = Int[f]
+            x = f
+            while haskey(par, x)
+                x = par[x]; pushfirst!(chain, x)
+            end
+            # Tausch (PDF Z. 11–12): e kommt nach T1; entlang der Kette wechseln
+            # die Kanten abwechselnd den Baum.
+            push!(T1, e)
+            for (i, c) in enumerate(chain)
+                if isodd(i)
+                    delete!(T1, c); push!(T2, c)
+                else
+                    delete!(T2, c); push!(T1, c)
+                end
+            end
+            return true
+        end
+
+        # Keine gemeinsame Kante in dieser Schicht → nächste Schicht aufbauen:
+        # für jede Kante g die Fundamentalkreis-Kanten im anderen Baum sammeln.
+        naechste = Int[]
+        for g in schicht
+            for fp in fundamental_cycle(andererbaum, edgelist, n, g)
+                if fp ∉ entdeckt
+                    push!(entdeckt, fp); par[fp] = g; push!(naechste, fp)
+                end
+            end
+        end
+        schicht = naechste
+        k += 1
+    end
+    return false
+end
+
+# Algorithmus 3 (PDF): Maximal distante Spannbäume (Kishi-Kajitani).
+# Solange sich noch eine gemeinsame Sehne augmentieren lässt, wird der Abstand
+# der beiden Bäume erhöht. Danach sind T1 und T2 maximal distant – und falls der
+# Graph zwei kantendisjunkte Spannbäume besitzt, sind sie es dann auch.
+function maximally_distant_trees!(T1::Set{Int}, T2::Set{Int}, edgelist, n)
+    changed = true
+    while changed
+        changed = false
+        for e in 1:length(edgelist)
+            if e ∉ T1 && e ∉ T2                            # gemeinsame Sehne
+                augment_along_common_chord!(T1, T2, edgelist, n, e) && (changed = true)
             end
         end
     end
-
-    ziel === nothing && return false
-
-    # Gefundene Tausch-Kette rückwärts abgehen und Zuweisungen aktualisieren.
-    node = ziel
-    while node !== nothing
-        (kante, wald) = node
-        assign[kante] = wald
-        node = from[(kante, wald)]
-    end
-    return true
+    return T1, T2
 end
 
-# Verteilt die Kanten auf zwei möglichst große, kantendisjunkte Wälder.
-# Rückgabe: Vektor `assign` mit assign[i] ∈ {0,1,2}
-#   0 = Kante in keinem Wald, 1 oder 2 = Nummer des Waldes.
-function _two_disjoint_forests(n, edgelist)
-    m      = length(edgelist)
-    assign = zeros(Int, m)
-    fixed  = falses(m)
-    for e0 in 1:m
-        _place!(assign, fixed, edgelist, n, e0)
-    end
-    return assign
+# Besitzt der Graph zwei KANTENDISJUNKTE Spannbäume? Wir bauen zwei Spannbäume
+# und machen sie mit Kishi-Kajitani maximal distant; bleibt keine gemeinsame
+# Kante übrig, ist die Antwort ja.
+function _has_two_disjoint_spanning_trees(n, edgelist)::Bool
+    n <= 1 && return true
+    T1 = _spanning_tree(n, edgelist)
+    T1 === nothing && return false                          # nicht zusammenhängend
+    T2 = _spanning_tree(n, edgelist)
+    maximally_distant_trees!(T1, T2, edgelist, n)
+    return isempty(intersect(T1, T2))
 end
 
 
@@ -214,18 +260,18 @@ function _degree(edgelist, alive, v)
     return d
 end
 
-# Wie viele Kanten lassen sich auf den lebenden Knoten in zwei disjunkte Wälder
-# packen? Zwei kantendisjunkte Spannbäume auf k Knoten haben genau 2*(k-1) Kanten.
-function _pack_size(N, edgelist, alive)
+# Baut aus den "lebenden" Knoten einen kompakten Teilgraphen (Knoten auf 1..k
+# umnummeriert) und prüft, ob er zwei kantendisjunkte Spannbäume besitzt.
+function _alive_has_two_trees(N, edgelist, alive)
     neu = zeros(Int, N); k = 0
     for v in 1:N; alive[v] && (k += 1; neu[v] = k); end
     kanten = [(neu[u], neu[w]) for (u, w) in edgelist if alive[u] && alive[w] && u != w]
-    return count(>(0), _two_disjoint_forests(k, kanten)), k
+    return _has_two_disjoint_spanning_trees(k, kanten)
 end
 
 # Lehman-Test: Gibt es eine Knotenmenge mit s und t, auf der zwei kantendisjunkte
 # Spannbäume existieren? Vorgehen: Knoten, die offensichtlich nicht helfen können
-# (Grad < 2), nach und nach entfernen und dann das Packing prüfen.
+# (Grad < 2), nach und nach entfernen und dann (per Kishi-Kajitani) prüfen.
 function _two_tree_connected(N, edgelist, s, t)
     s == t && return true
     alive = trues(N)
@@ -246,8 +292,7 @@ function _two_tree_connected(N, edgelist, s, t)
         (alive[s] && alive[t]) || return false
         count(alive) <= 1      && return false
 
-        pack, k = _pack_size(N, edgelist, alive)
-        pack == 2(k - 1)       && return true     # zwei volle Spannbäume → Short gewinnt!
+        _alive_has_two_trees(N, edgelist, alive) && return true   # Short gewinnt!
 
         # Sonst: Knoten mit kleinstem Grad entfernen und erneut versuchen.
         bester, min_grad = 0, typemax(Int)
