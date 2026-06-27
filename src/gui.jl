@@ -80,27 +80,6 @@ function _edge_at(g::GameGraph, pos, x, y)
     return best
 end
 
-# Berechnet für jede Kante einen seitlichen Versatz, damit mehrere Kanten
-# zwischen denselben zwei Knoten (Mehrfachkanten) nebeneinander sichtbar sind
-# und nicht übereinander liegen.
-function _parallel_offsets(g::GameGraph)
-    # Kanten nach ihrem (kleineres,größeres) Knotenpaar gruppieren.
-    groups = Dict{Tuple{Int,Int}, Vector{Int}}()
-    for (i, e) in enumerate(g.edges)
-        key = e.u.id <= e.v.id ? (e.u.id, e.v.id) : (e.v.id, e.u.id)
-        push!(get!(groups, key, Int[]), i)
-    end
-    # Jeder Kante einen Versatz symmetrisch um die Mittellinie zuweisen.
-    offset = zeros(length(g.edges))
-    for (_, idxs) in groups
-        c = length(idxs)
-        for (r, i) in enumerate(idxs)
-            offset[i] = (r - (c + 1) / 2) * 14.0
-        end
-    end
-    return offset
-end
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Layout: ordnet die Knoten gleichmäßig auf einem Kreis an.
 #
@@ -135,21 +114,13 @@ function _draw_graph(ctx, state::GameState, pos, show_hints::Bool)
     set_source_rgb(ctx, 0.97, 0.97, 0.94)
     paint(ctx)
 
-    # Versatz für parallele Kanten vorberechnen.
-    offset = _parallel_offsets(g)
-
     # ── Kanten zeichnen ──────────────────────────────────────────────────────
-    for (i, e) in enumerate(g.edges)
+    # Alle Graphen sind einfach (keine Mehrfachkanten zwischen zwei Knoten),
+    # daher zeichnen wir jede Kante als gerade Linie zwischen ihren Endknoten.
+    for e in g.edges
         (haskey(pos, e.u.id) && haskey(pos, e.v.id)) || continue
-        (ax, ay) = pos[e.u.id]
-        (bx, by) = pos[e.v.id]
-
-        # Senkrechten Versatz anwenden, damit Mehrfachkanten getrennt erscheinen.
-        dx, dy = bx - ax, by - ay
-        len = hypot(dx, dy)
-        len = len == 0 ? 1.0 : len
-        ox, oy = -dy / len * offset[i], dx / len * offset[i]
-        ax2, ay2, bx2, by2 = ax + ox, ay + oy, bx + ox, by + oy
+        (ax2, ay2) = pos[e.u.id]
+        (bx2, by2) = pos[e.v.id]
 
         # Freie Kanten während des Spiels dezent grün unterlegen (= "hier klickbar").
         if e.state == :neutral && show_hints
