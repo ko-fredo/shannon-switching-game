@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(julia --version)",
+      "Bash(julia test/runtests.jl)",
+      "Bash(julia -e ' *)",
+      "Bash(timeout 540 julia --project=. -e ' *)"
+    ]
+  }
+}
