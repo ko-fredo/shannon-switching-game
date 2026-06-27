@@ -4,6 +4,7 @@ using Random
 
 include("game.jl")      
 include("strategy.jl") 
+include("WT19_submission.jl")  # gewichtete Wettbewerbsstrategie (Teil 5)
 include("demo.jl")     
 include("gui.jl")       
 

@@ -6,6 +6,7 @@ using Random
 
 include("../src/game.jl")
 include("../src/strategy.jl")
+include("../src/WT19_submission.jl")   # gewichtete Wettbewerbsstrategie
 include("../src/demo.jl")
 
 # Kleiner Helfer: ein "Diamant"-Graph s-a-b-t wie in der Aufgaben-PDF.

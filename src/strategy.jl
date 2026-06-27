@@ -1,22 +1,21 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Shannon-Switching-Spiel – Computerstrategien
+# Shannon-Switching-Spiel – Optimale Strategie für Short (klassisches Spiel)
 # TU Berlin, CoMa II, SoSe 2026
 #
-#   short_strategy                 – optimale Strategie für Short (klassisches Spiel)
-#   weighted_short / weighted_cut  – Heuristiken für den Wettbewerb (Teil 5)
+#   short_strategy – optimale Strategie für Short im ungewichteten Spiel
 #
-# Kern der Short-Strategie sind zwei kantendisjunkte Spannbäume, berechnet mit
-# dem Verfahren aus Anhang A der PDF (maximally_distant_trees! = Kishi-Kajitani,
+# Kern der Strategie sind zwei kantendisjunkte Spannbäume, berechnet mit dem
+# Verfahren aus Anhang A der PDF (maximally_distant_trees! = Kishi-Kajitani,
 # augment_along_common_chord! = Augmentierung entlang einer gemeinsamen Sehne).
 #
 # Hinweis: Eine optimale Cut-Strategie für das klassische Spiel ist laut Aufgabe
-# nicht verpflichtend und wird hier bewusst NICHT implementiert.
+# nicht verpflichtend und wird hier bewusst NICHT implementiert. Die Heuristiken
+# für das GEWICHTETE Spiel (weighted_short/weighted_cut, TEAM_NAME) stehen in der
+# eigenständigen Wettbewerbsdatei WT19_submission.jl.
 #
 # Voraussetzung: Die Datenstrukturen (Vertex, Edge, GameGraph, GameState) sowie
 # valid_moves, path_exists und adjacency_list sind in game.jl definiert.
 # ═══════════════════════════════════════════════════════════════════════════════
-
-const TEAM_NAME = "WT19"
 
 include("union_find.jl")
 
@@ -362,143 +361,4 @@ function short_strategy(state::GameState)::Edge
         g.edges[i].state == :neutral && return g.edges[i]
     end
     return first(zuege)
-end
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TEIL 5: Heuristiken für das GEWICHTETE Spiel (Strategiewettbewerb)
-#
-# Im gewichteten Spiel zählt das Gewicht von Shorts s-t-Weg: Short will es klein
-# halten, Cut will es groß machen. Unsere Heuristik ist bewusst einfach und für
-# beide Spieler symmetrisch:
-#
-#   Beide schauen auf DIESELBE Zahl – die Kosten des aktuell günstigsten s-t-Wegs
-#   (schon gesicherte Short-Kanten kosten 0, entfernte Kanten sind unbenutzbar).
-#
-#   * Short sichert auf diesem günstigsten Weg die "Engpass-Kante": die Kante,
-#     deren Verlust den Weg am stärksten verteuern würde. So friert Short den
-#     billigen Weg ein, bevor Cut ihn kaputtmachen kann.
-#   * Cut entfernt genau diese Engpass-Kante – die, die den günstigsten Weg am
-#     stärksten verteuert. So zwingt Cut Short auf einen teureren Umweg.
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Günstigster s-t-Weg (Dijkstra). Schon gesicherte Short-Kanten kosten 0.
-# Rückgabe: Kanten-Indizes des Weges (oder [], falls es keinen Weg gibt).
-function _cheapest_path(g::GameGraph)
-    INF  = Inf
-    dist = Dict(v.id => INF for v in g.vertices)
-    dist[g.s.id] = 0.0
-    prev = Dict{Int,Tuple{Int,Int}}()
-    done = Set{Int}()
-    adj  = adjacency_list(g, s -> s == :neutral || s == :short)
-
-    while true
-        # Nächsten noch unbesuchten Knoten mit kleinster Distanz wählen.
-        u, d_u = -1, INF
-        for (v, d) in dist
-            v ∉ done && d < d_u && (u = v; d_u = d)
-        end
-        (u == -1 || u == g.t.id) && break
-        push!(done, u)
-
-        for (v, idx) in adj[u]
-            v in done && continue
-            e = g.edges[idx]
-            w = e.state == :short ? 0.0 : e.weight     # gesicherte Kanten sind gratis
-            if dist[u] + w < get(dist, v, INF)
-                dist[v] = dist[u] + w
-                prev[v] = (u, idx)
-            end
-        end
-    end
-
-    haskey(prev, g.t.id) || return Int[]
-
-    path, cur = Int[], g.t.id
-    while cur != g.s.id
-        haskey(prev, cur) || return Int[]
-        p, i = prev[cur]; push!(path, i); cur = p
-    end
-    return path
-end
-
-# Gesamtkosten des günstigsten s-t-Wegs (Short-Kanten zählen 0).
-# Gibt Inf zurück, wenn s und t nicht mehr verbunden werden können.
-function _cheapest_path_weight(g::GameGraph)
-    path = _cheapest_path(g)
-    isempty(path) && return (g.s.id == g.t.id ? 0.0 : Inf)
-    return sum(g.edges[i].state == :short ? 0.0 : g.edges[i].weight for i in path; init = 0.0)
-end
-
-"""
-    weighted_short(state::GameState) -> Edge
-
-Heuristik für Short im gewichteten Spiel: sichert auf dem günstigsten s-t-Weg
-die Engpass-Kante – die Kante, deren Entfernung den Weg am stärksten verteuern
-würde.
-"""
-function weighted_short(state::GameState)::Edge
-    g, zuege = state.graph, valid_moves(state)
-    isempty(zuege) && error("weighted_short: keine Züge möglich")
-
-    # Wenn ein Zug direkt eine Verbindung fertigstellt: machen (sichert Punkte).
-    for e in zuege
-        _completes_short_path(g, e) && return e
-    end
-
-    # Neutrale Kanten auf dem aktuell günstigsten Weg.
-    weg        = _cheapest_path(g)
-    kandidaten = [g.edges[i] for i in weg if g.edges[i].state == :neutral]
-    isempty(kandidaten) && return first(zuege)     # kein günstiger Weg → Notnagel
-
-    # Engpass-Kante bestimmen: simulieren, Cut würde sie entfernen, und schauen,
-    # um wie viel die Wegkosten dann steigen. Die Kante mit dem größten Anstieg
-    # ist am wertvollsten und wird gesichert.
-    basiskosten = _cheapest_path_weight(g)
-    beste, max_schaden = kandidaten[1], -Inf
-    for e in kandidaten
-        e.state = :cut
-        schaden = _cheapest_path_weight(g) - basiskosten
-        e.state = :neutral
-        schaden > max_schaden && (max_schaden = schaden; beste = e)
-    end
-    return beste
-end
-
-"""
-    weighted_cut(state::GameState) -> Edge
-
-Heuristik für Cut im gewichteten Spiel: entfernt die Kante, die den günstigsten
-s-t-Weg am stärksten verteuert (und damit Short den teuersten Umweg aufzwingt).
-"""
-function weighted_cut(state::GameState)::Edge
-    g, zuege = state.graph, valid_moves(state)
-    isempty(zuege) && error("weighted_cut: keine Züge möglich")
-
-    # Sofortgewinn: trennt ein Zug s und t vollständig?
-    for e in zuege
-        e.state  = :cut
-        getrennt = isempty(find_path(g, g.s.id, g.t.id, s -> s == :neutral || s == :short))
-        e.state  = :neutral
-        getrennt && return e
-    end
-
-    # Kandidaten: bevorzugt Kanten auf dem günstigsten Weg, sonst alle Züge.
-    weg        = _cheapest_path(g)
-    kandidaten = [g.edges[i] for i in weg if g.edges[i].state == :neutral]
-    isempty(kandidaten) && (kandidaten = zuege)
-
-    # Kante wählen, deren Entfernung die Wegkosten am stärksten erhöht.
-    # (Wird der Weg ganz unmöglich = Inf, ist das für Cut natürlich am besten.)
-    basis = _cheapest_path_weight(g)
-    grosse_zahl(x) = isinf(x) ? 1e9 : x            # Inf für den Vergleich ersetzen
-    beste, max_schaden = kandidaten[1], -Inf
-    for e in kandidaten
-        e.state = :cut
-        neu     = _cheapest_path_weight(g)
-        e.state = :neutral
-        schaden = grosse_zahl(neu) - grosse_zahl(basis)
-        schaden > max_schaden && (max_schaden = schaden; beste = e)
-    end
-    return beste
 end
