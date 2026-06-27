@@ -82,4 +82,32 @@ mkstate(g) = GameState(g, :short, Tuple{Symbol,Edge}[], nothing)
         for e in g.edges; e.state = :cut; end
         @test isempty(find_path(g, g.s.id, g.t.id, s -> s == :neutral))
     end
+
+    @testset "Kishi-Kajitani: zwei kantendisjunkte Spannbäume" begin
+        # K4 besitzt zwei kantendisjunkte Spannbäume.
+        k4 = [(1,2),(1,3),(1,4),(2,3),(2,4),(3,4)]
+        @test _has_two_disjoint_spanning_trees(4, k4)
+        # Ein Pfad (nur n-1 Kanten) und ein 4-Kreis (zu wenige Kanten): nein.
+        @test !_has_two_disjoint_spanning_trees(4, [(1,2),(2,3),(3,4)])
+        @test !_has_two_disjoint_spanning_trees(4, [(1,2),(2,3),(3,4),(4,1)])
+        # Die berechneten Bäume sind wirklich disjunkt und je ein Spannbaum.
+        T1 = _spanning_tree(4, k4); T2 = _spanning_tree(4, k4)
+        maximally_distant_trees!(T1, T2, k4, 4)
+        @test isempty(intersect(T1, T2))
+        @test length(T1) == 3 && length(T2) == 3
+    end
+
+    @testset "short_strategy gewinnt das Short-Spiel" begin
+        # example_graph ist ein Short-Spiel: Short gewinnt gegen jedes Cut-Spiel.
+        for seed in 1:20
+            Random.seed!(seed)
+            state = new_game(example_graph())
+            while state.winner === nothing && !isempty(valid_moves(state))
+                e = state.current_player == :short ? short_strategy(state) :
+                                                     rand(valid_moves(state))
+                make_move!(state, e)
+            end
+            @test state.winner == :short
+        end
+    end
 end
