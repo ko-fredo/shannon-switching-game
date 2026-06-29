@@ -47,10 +47,11 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
         end
     end
 
-    # Ziel nicht erreichbar?
-    (from == to || haskey(vorgaenger, to)) || return Int[]
-
-    # Weg von `to` rückwärts bis `from` zusammensetzen.
+    # wurde Ziel erreicht? 
+    if from!=to && !haskey(vorgaenger, to)
+        return Int[]
+    end
+    # Weg zusammensetzen.
     weg     = Int[]
     aktuell = to
     while aktuell != from
