@@ -28,16 +28,16 @@ include("union_find.jl")
 # bekommt und true/false zurückgibt. Rückgabe: Liste der benutzten Kanten-Indizes
 # (oder eine leere Liste, falls es keinen solchen Weg gibt).
 function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{Int}
-    adj = adjacency_list(g, allowed)            # Nachbarn je Knoten: (Nachbar, Kanten-Index)
-
-    vorgaenger = Dict{Int,Tuple{Int,Int}}()     # Knoten -> (woher, über welche Kante)
+    adj = adjacency_list(g, allowed)            # adjacency list gibt adj_nodes = Dict{Int, Vector{Tuple{Int,Int}}}() zurück
+    vorgaenger = Dict{Int,Tuple{Int,Int}}()     
     besucht    = Set{Int}([from])
     queue      = Int[from]
-
-    # Standard-BFS: Knoten Schicht für Schicht abarbeiten.
+    # BFS
     while !isempty(queue)
         u = popfirst!(queue)
-        u == to && break
+        if u == to 
+            break
+        end     
         for (v, kante) in adj[u]
             if v ∉ besucht
                 push!(besucht, v)
