@@ -20,13 +20,9 @@
 include("union_find.jl")
 
 
-# ───────────────────────────────────────────────────────────────────────────────
-# Kleiner Helfer: einen Weg als Liste von Kanten-Indizes finden (Breitensuche/BFS)
-# ───────────────────────────────────────────────────────────────────────────────
-# Sucht einen Weg von Knoten `from` nach `to`, der nur über "erlaubte" Kanten läuft.
-# `allowed` ist eine Funktion, die den Zustand einer Kante (:neutral/:short/:cut)
-# bekommt und true/false zurückgibt. Rückgabe: Liste der benutzten Kanten-Indizes
-# (oder eine leere Liste, falls es keinen solchen Weg gibt).
+```
+Findet Weg zwischen from und to mittels breitensuche. Ausgabe: Liste von besuchten Kanten
+```
 function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{Int}
     adj = adjacency_list(g, allowed)            # adjacency list gibt adj_nodes = Dict{Int, Vector{Tuple{Int,Int}}}() zurück
     vorgaenger = Dict{Int,Tuple{Int,Int}}()     
@@ -48,10 +44,10 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
     end
 
     # wurde Ziel erreicht? 
-    if from!=to && !haskey(vorgaenger, to)
+    if from != to && !haskey(vorgaenger, to)
         return Int[]
     end
-    # Weg zusammensetzen.
+    # Weg zusammensetzen
     weg     = Int[]
     aktuell = to
     while aktuell != from
@@ -83,10 +79,10 @@ end
 
 # Baut einen Spannbaum (Menge von Kanten-Indizes) per Union-Find auf.
 # Rückgabe: die Kantenmenge, oder `nothing`, falls der Graph nicht zusammenhängt.
-function _spanning_tree(n, edgelist)::Union{Set{Int},Nothing}
+function _spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
     nodes = union_find([(i, [i]) for i in 1:n])
     tree  = Set{Int}()
-    for (i, (u, v)) in enumerate(edgelist)
+    for (i, (u, v)) in enumerate(kantenliste)
         if find_set!(nodes[u]).value != find_set!(nodes[v]).value
             union!(nodes[u], nodes[v])
             push!(tree, i)
