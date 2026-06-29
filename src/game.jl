@@ -153,7 +153,7 @@ function path_exists(g::GameGraph, x::Int, y::Int, allowed::Function)::Bool
         end
     end
 
-    return false # wenn y nie gefunden wird -> kein weg
+    return false # wenn y nie gefunden wird gibt es keinen weg
 end
 
 function is_short(state::Symbol)::Bool
@@ -167,16 +167,6 @@ end
 
 # Testgraphen
 
-"""
-    random_graph(n::Int, m::Int; weighted=false) -> GameGraph
-
-Erzeugt einen zufälligen zusammenhängenden, einfachen Graphen mit `n` Knoten
-und `m` Kanten. Knoten 1 ist die Quelle `s`, Knoten `n` ist das Ziel `t`. Im
-gewichteten Fall (`weighted=true`) werden Kantengewichte gleichmäßig aus
-`[1, 10]` gezogen, sonst sind alle Gewichte `0.0`.
-
-Es muss `n-1 ≤ m ≤ n(n-1)/2` gelten.
-"""
 function random_graph(n::Int, m::Int; weighted::Bool=false)::GameGraph
     n >= 2 || throw(ArgumentError("Es werden mindestens 2 Knoten benötigt"))
     maxedges = n * (n - 1) ÷ 2
@@ -189,7 +179,7 @@ function random_graph(n::Int, m::Int; weighted::Bool=false)::GameGraph
     nextweight() = weighted ? round(1.0 + 9.0 * rand(); digits = 2) : 0.0
     edgekey(a, b) = a < b ? (a, b) : (b, a)
 
-    # 1) Zufälliger Spannbaum garantiert Zusammenhang.
+    # Zufälliger Spannbaum garantiert Zusammenhang.
     perm = randperm(n)
     for i in 2:n
         a = perm[i]
@@ -198,7 +188,7 @@ function random_graph(n::Int, m::Int; weighted::Bool=false)::GameGraph
         push!(edges, Edge(length(edges) + 1, vertices[a], vertices[b], nextweight(), :neutral))
     end
 
-    # 2) Restliche Kanten zufällig ergänzen (einfacher Graph, keine Schlingen).
+    # Restliche Kanten zufällig ergänzen (einfacher Graph, keine Schlingen).
     while length(edges) < m
         a = rand(1:n)
         b = rand(1:n)

@@ -1,74 +1,41 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Grafische Oberfläche für das Shannon-Switching-Spiel (Gtk4 + Cairo).
-#
-# Diese GUI ist bewusst schlank gehalten und bietet genau die Standard-Funktionen:
-#
-#   * Kanten werden nach ihrem Zustand eingefärbt
-#       - neutral (noch frei)  → grau
-#       - von Short gewählt    → blau (dick)
-#       - von Cut entfernt     → rot, gestrichelt
-#   * Anzeige, welcher Spieler am Zug ist, bzw. wer gewonnen hat
-#   * Klick auf eine freie (neutrale) Kante führt den Zug des aktuellen
-#     Spielers aus; abwechselnd ziehen Short und Cut
-#   * Schaltfläche "Neues Spiel"  → setzt den aktuellen Graphen zurück
-#   * Schaltfläche "Zufallsgraph"  → erzeugt einen neuen, zufälligen Graphen
-#
-# Bewusst NICHT enthalten (früher optionale Zusatzfunktionen): Grapheditor,
-# Computer-/KI-Gegner, Beispielgraph-Auswahl, gewichtete Graphen.
-# ─────────────────────────────────────────────────────────────────────────────
+using Gtk4
+using Cairo
 
-using Gtk4     # Fenster, Buttons, Labels, Zeichenfläche, Maus-Gesten
-using Cairo    # 2D-Zeichnung auf der Zeichenfläche (Linien, Kreise, Text)
+const CANVAS_W = 720      # breite Zeichenfläche
+const CANVAS_H = 560      # höhe Zeichenfläche
+const VRADIUS  = 20       # Radius eines Knotenkreises
+const HIT_EDGE = 9        # Klick-Toleranz: so nah muss der Klick an einer Kante sein
 
-# ── Feste Maße der Darstellung (in Pixel) ────────────────────────────────────
-const CANVAS_W = 720      # Breite der Zeichenfläche
-const CANVAS_H = 560      # Höhe der Zeichenfläche
-const VRADIUS  = 18.0     # Radius eines Knotenkreises
-const HIT_EDGE = 9.0      # Klick-Toleranz: so nah muss der Klick an einer Kante sein
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Statustext
-#
-# Liefert die Zeile, die oben im Fenster angezeigt wird: entweder wer am Zug ist
-# oder – sobald die Partie entschieden ist – wer gewonnen hat.
-# ─────────────────────────────────────────────────────────────────────────────
+# text: wer am zug ist bzw. wer gewonnen hat
 function status_string(state::GameState)::String
     if state.winner === nothing
-        # Noch kein Gewinner: Hinweis, welche Partei ziehen muss.
-        return state.current_player == :short ? "Am Zug: Short (verbinden)" :
-                                                "Am Zug: Cut (trennen)"
+        return state.current_player == :short ? "Am Zug: Short" : "Am Zug: Cut"
     end
-    # Partie entschieden.
     return state.winner == :short ? "Short hat gewonnen!" : "Cut hat gewonnen!"
 end
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Geometrie-Helfer
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Kürzester Abstand des Punktes (px,py) zur Strecke von (ax,ay) nach (bx,by).
-# Wird gebraucht, um zu erkennen, welche Kante der Nutzer angeklickt hat.
+#kürzester abstand von p zur gerade \overline{ab} -> erkennen welche kante angeklickt wird
 function _point_segment_dist(px, py, ax, ay, bx, by)
     dx, dy = bx - ax, by - ay
     len2 = dx * dx + dy * dy
     if len2 == 0
-        # Start- und Endpunkt fallen zusammen → Abstand zum Punkt.
+        # falls a=b euklidischer abstand d(a,b)
         return hypot(px - ax, py - ay)
     end
-    # Projektion des Punktes auf die Gerade, auf [0,1] begrenzt (= auf die Strecke).
+    # projektion von p auf \overline{ab} mit skalarprodukt -> wenn nicht zwischen a und b suche nächsten punkt der dazwischen ist
     s = clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0.0, 1.0)
-    cx, cy = ax + s * dx, ay + s * dy        # nächster Punkt auf der Strecke
+    cx, cy = ax + s * dx, ay + s * dy
     return hypot(px - cx, py - cy)
 end
 
-# Sucht die Kante (Index in g.edges), die am dichtesten am Klickpunkt (x,y) liegt.
-# Gibt 0 zurück, wenn keine Kante innerhalb der Klick-Toleranz liegt.
+# sucht nächste kante an klickpunkt -> 0 wenn keine kante in toleranzgrenze ist
 function _edge_at(g::GameGraph, pos, x, y)
-    best = 0          # bisher bester Kantenindex
-    bestd = HIT_EDGE  # bisher kleinster Abstand (startet bei der Toleranzgrenze)
+    best = 0          # bisher bester kantenindex
+    bestd = HIT_EDGE  # bisher kleinster abstand (start bei toleranzgrenze)
     for (i, e) in enumerate(g.edges)
         # Beide Endknoten müssen eine bekannte Position haben.
-        (haskey(pos, e.u.id) && haskey(pos, e.v.id)) || continue
+        (haskey(pos, e.u.id) && haskey(pos, e.v.id)) || continue    #wenn gilt machen sonst diese kante überspringen
         (ax, ay) = pos[e.u.id]
         (bx, by) = pos[e.v.id]
         d = _point_segment_dist(x, y, ax, ay, bx, by)
@@ -80,188 +47,115 @@ function _edge_at(g::GameGraph, pos, x, y)
     return best
 end
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Layout: ordnet die Knoten gleichmäßig auf einem Kreis an.
-#
-# Ergebnis ist ein Dict  Knoten-id  →  (x, y)-Pixelposition.
-# ─────────────────────────────────────────────────────────────────────────────
+# anordnug kanten auf einem Kreis -> knoten-id mit koordinaten in dict
 function _circular_layout(g::GameGraph)
     pos = Dict{Int, Tuple{Float64,Float64}}()
-    cx, cy = CANVAS_W / 2, CANVAS_H / 2                 # Mittelpunkt der Fläche
-    R = min(CANVAS_W, CANVAS_H) * 0.36                 # Radius des Knotenkreises
+    cx, cy = CANVAS_W / 2, CANVAS_H / 2                 # mittelpunkt
+    R = CANVAS_H * 0.36                                 # radius knotenkreis, so dass noch abstand zu rand ist
     ids = [v.id for v in g.vertices]
-    n = max(length(ids), 1)
+    n = max(length(ids), 1)                             # teilen durch 0 vermeiden (redundant weil random_graph immer mind 2 knoten)
     for (i, id) in enumerate(ids)
-        θ = π + 2π * (i - 1) / n                        # Winkel des i-ten Knotens
-        pos[id] = (cx + R * cos(θ), cy + R * sin(θ))
+        θ = -(1/8)*π + 2π * (i - 1) / n                            # winkel i-ter knoten
+        pos[id] = (cx + R * cos(θ), cy + R * sin(θ))    # position knoten mit polarkoordinaten kreis
     end
     return pos
 end
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Zeichnen des Graphen
-#
-# ctx           – Cairo-Zeichenkontext der Zeichenfläche
-# state         – aktueller Spielzustand (Graph + Spieler + Gewinner)
-# pos           – Positionen der Knoten (siehe _circular_layout)
-# show_hints    – true, solange die Partie läuft: freie Kanten werden dezent
-#                 grün hervorgehoben, um anklickbare Züge zu zeigen
-# ─────────────────────────────────────────────────────────────────────────────
 function _draw_graph(ctx, state::GameState, pos, show_hints::Bool)
     g = state.graph
 
-    # Hintergrund füllen (helles Beige).
-    set_source_rgb(ctx, 0.97, 0.97, 0.94)
+    #hintergrund zeichnen
+    set_source_rgb(ctx,1,1,1)
     paint(ctx)
 
-    # ── Kanten zeichnen ──────────────────────────────────────────────────────
-    # Alle Graphen sind einfach (keine Mehrfachkanten zwischen zwei Knoten),
-    # daher zeichnen wir jede Kante als gerade Linie zwischen ihren Endknoten.
+    # kanten zeichnen
     for e in g.edges
         (haskey(pos, e.u.id) && haskey(pos, e.v.id)) || continue
         (ax2, ay2) = pos[e.u.id]
         (bx2, by2) = pos[e.v.id]
 
-        # Freie Kanten während des Spiels dezent grün unterlegen (= "hier klickbar").
+        # freie kanten mit blau unterlegen
         if e.state == :neutral && show_hints
-            set_source_rgba(ctx, 0.20, 0.70, 0.25, 0.55)
+            set_source_rgba(ctx, 0, 0.367, 0.719, 0.20)
             set_line_width(ctx, 11.0)
-            set_dash(ctx, Float64[])
             move_to(ctx, ax2, ay2); line_to(ctx, bx2, by2); stroke(ctx)
         end
 
-        # Eigentliche Kante je nach Zustand einfärben.
+        # Kante je nach Zustand einfärben.
         if e.state == :neutral
-            set_source_rgb(ctx, 0.55, 0.55, 0.55)         # neutral = grau
+            set_source_rgb(ctx, 0, 0.367, 0.719)         # neutral = blau, dünn
             set_line_width(ctx, 3.0)
-            set_dash(ctx, Float64[])
         elseif e.state == :short
-            set_source_rgb(ctx, 0.10, 0.30, 0.85)         # Short = blau, dick
+            set_source_rgb(ctx, 0.10, 0.367, 0.719)         # Short = blau, dick
             set_line_width(ctx, 6.0)
-            set_dash(ctx, Float64[])
         else # :cut
             set_source_rgba(ctx, 0.80, 0.12, 0.12, 0.65)  # Cut = rot, gestrichelt
             set_line_width(ctx, 2.0)
             set_dash(ctx, [6.0, 5.0])
         end
-        move_to(ctx, ax2, ay2); line_to(ctx, bx2, by2); stroke(ctx)
-        set_dash(ctx, Float64[])                          # Strichmuster zurücksetzen
+        move_to(ctx, ax2, ay2)                            # kante von a nach b malen
+        line_to(ctx, bx2, by2)
+        stroke(ctx)
+        set_dash(ctx, Float64[])                          # gestrichelte linie zurücksetzen
     end
 
-    # ── Knoten zeichnen ──────────────────────────────────────────────────────
+    # knoten zeichnen
     for v in g.vertices
         haskey(pos, v.id) || continue
         (vx, vy) = pos[v.id]
-        is_s = v.id == g.s.id      # Startknoten s
-        is_t = v.id == g.t.id      # Zielknoten t
+        is_s = v.id == g.s.id      # startknoten s
+        is_t = v.id == g.t.id      # zielknoten t
 
-        # Füllfarbe: s grün, t orange, sonst dunkelgrau.
+        # farbe von s und t hervorheben
         if is_s
-            set_source_rgb(ctx, 0.15, 0.55, 0.20)
+            set_source_rgb(ctx, 1, 0, 0)
         elseif is_t
-            set_source_rgb(ctx, 0.90, 0.55, 0.10)
+            set_source_rgb(ctx, 1, 0, 0)
         else
-            set_source_rgb(ctx, 0.30, 0.30, 0.35)
+            set_source_rgb(ctx, 0, 0.367, 0.719)
         end
-        arc(ctx, vx, vy, VRADIUS, 0.0, 2π); fill(ctx)
-
-        # Dünner schwarzer Rand um den Knoten.
-        set_source_rgb(ctx, 0.1, 0.1, 0.1)
-        set_line_width(ctx, 1.5)
-        arc(ctx, vx, vy, VRADIUS, 0.0, 2π); stroke(ctx)
-
-        # Beschriftung: "s", "t" oder die Knotennummer, zentriert.
-        label = is_s ? "s" : is_t ? "t" : string(v.id)
-        set_source_rgb(ctx, 1.0, 1.0, 1.0)
-        select_font_face(ctx, "Sans", Cairo.FONT_SLANT_NORMAL, Cairo.FONT_WEIGHT_BOLD)
-        set_font_size(ctx, 16.0)
-        te = text_extents(ctx, label)
-        move_to(ctx, vx - te[3] / 2 - te[1], vy - te[4] / 2 - te[2])
-        show_text(ctx, label)
+        arc(ctx, vx, vy, VRADIUS, 0.0, 2π)      # kreis an kotenposition malen und dann ausfüllen
+        fill(ctx)
     end
 end
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hauptfenster
-# ─────────────────────────────────────────────────────────────────────────────
 
 """
     run_game(graph::GameGraph = example_graph())
 
 Öffnet ein Gtk4-Fenster und macht das Shannon-Switching-Spiel spielbar.
-
-Zwei Personen ziehen abwechselnd: **Short** klickt eine freie Kante an, um sie
-zu sichern (blau), **Cut** klickt eine freie Kante an, um sie zu entfernen (rot).
-Short gewinnt, sobald seine Kanten s und t verbinden; Cut gewinnt, sobald das
-unmöglich geworden ist.
-
-Über die Schaltflächen lässt sich die laufende Partie zurücksetzen
-("Neues Spiel") oder ein neuer Zufallsgraph erzeugen ("Zufallsgraph").
+Short klickt eine freie Kante an, um sie zu sichern (blau);
+Cut klickt eine freie Kante an, um sie zu entfernen (rot).
 """
-function run_game(graph::GameGraph = example_graph(); _setup_only::Bool = false)
-    # Aktueller Spielzustand. Eine Kopie, damit der übergebene Graph unangetastet bleibt.
-    state = new_game(deepcopy(graph))
-    # Knotenpositionen für die Zeichnung.
-    pos = _circular_layout(state.graph)
-    # Kurze Beschreibung des aktuellen Graphen (für das Info-Label).
-    info_text = Ref("Beispielgraph")
+function run_game(graph::GameGraph = example_graph())
+    state = new_game(deepcopy(graph))               # deepcopy um mutable struct edge nicht zu verändern
+    pos   = _circular_layout(state.graph)           # positionen aller knoten berechnen
 
-    # ── Widgets aufbauen ─────────────────────────────────────────────────────
-    win    = GtkWindow("Shannon-Switching-Spiel", CANVAS_W, CANVAS_H + 110)
-    vbox   = GtkBox(:v)                                   # vertikale Anordnung
-    status = GtkLabel(status_string(state))              # Zeile "Am Zug: …"
-    info   = GtkLabel(info_text[])                       # Zeile mit Graph-Info
-    canvas = GtkCanvas(CANVAS_W, CANVAS_H)               # Zeichenfläche
-
-    # Knopfleiste mit den beiden Schaltflächen.
-    row     = GtkBox(:h)
+    win    = GtkWindow("Shannon-Switching-Spiel", CANVAS_W, CANVAS_H + 80)  # window
+    vbox   = GtkBox(:v)                                                     # stapelt untereinander
+    status = GtkLabel(status_string(state))                                 
+    canvas = GtkCanvas(CANVAS_W, CANVAS_H)
+    row    = GtkBox(:h)                                                     # stapelt nebeneinander
     btn_new  = GtkButton("Neues Spiel")
     btn_rand = GtkButton("Zufallsgraph")
 
-    # Ein bisschen Abstand für Labels und Knopfleiste.
-    for w in (status, info)
-        Gtk4.G_.set_margin_top(w, 6); Gtk4.G_.set_margin_bottom(w, 2)
-    end
-    Gtk4.G_.set_margin_top(row, 4); Gtk4.G_.set_margin_bottom(row, 4)
-
-    # Widgets ins Fenster einhängen (Reihenfolge = Anordnung von oben nach unten).
-    push!(win, vbox)
+    push!(win, vbox)                                                        # alles hintereinander einfügen
     push!(vbox, status)
     push!(vbox, canvas)
-    push!(vbox, info)
     push!(vbox, row)
     push!(row, btn_new)
     push!(row, btn_rand)
 
-    # ── Hilfsfunktionen ──────────────────────────────────────────────────────
-
-    # Oberfläche an den aktuellen Spielzustand anpassen: Statuszeile, Info und
-    # Neuzeichnen der Zeichenfläche.
+    # status und canvas aktualisieren
     function refresh!()
         Gtk4.G_.set_label(status, status_string(state))
-        Gtk4.G_.set_label(info, info_text[])
-        draw(canvas)
+        draw(canvas)                                    
     end
 
-    # Übernimmt einen neuen Graphen und startet damit eine frische Partie.
-    function load_graph!(g::GameGraph, label::String)
-        empty!(pos); merge!(pos, _circular_layout(g))    # neue Positionen
-        info_text[] = label
-        state = new_game(deepcopy(g))
-        refresh!()
+    draw(canvas) do widget  # callback für "draw" signal, widget ist von gtk automatisch übergebene zeichenfläche                                       
+        _draw_graph(getgc(widget), state, pos, state.winner === nothing) # getgc holt daraus cairo zeichenkontext (ctx) und dann mit neuen infos neuen graphen zeichnen
     end
 
-    # ── Zeichnen ─────────────────────────────────────────────────────────────
-    # Wird von Gtk aufgerufen, sobald die Zeichenfläche neu gemalt werden muss.
-    @guarded draw(canvas) do widget
-        ctx = getgc(widget)
-        # Hinweise (grüne Hervorhebung freier Kanten) nur zeigen, solange offen.
-        _draw_graph(ctx, state, pos, state.winner === nothing)
-    end
-
-    # ── Schaltfläche "Neues Spiel": gleichen Graphen zurücksetzen ────────────
-    signal_connect(btn_new, "clicked") do _
-        # Alle Kanten wieder freigeben und Partie neu starten.
+    signal_connect(btn_new, "clicked") do _ctrl # automatisch übergebenes objekt wird aber nicht gebraucht
         for e in state.graph.edges
             e.state = :neutral
         end
@@ -269,41 +163,28 @@ function run_game(graph::GameGraph = example_graph(); _setup_only::Bool = false)
         refresh!()
     end
 
-    # ── Schaltfläche "Zufallsgraph": neuen zufälligen Graphen erzeugen ───────
-    signal_connect(btn_rand, "clicked") do _
-        n = rand(5:9)                                    # zufällige Knotenzahl
-        m = rand(n:min(n*(n-1)÷2, n + 6))                # zufällige Kantenzahl
-        load_graph!(random_graph(n, m),
-                    "Zufallsgraph ($n Knoten, $m Kanten)")
-    end
-
-    # ── Maus-Klick auf die Zeichenfläche: Zug ausführen ──────────────────────
-    click = GtkGestureClick()
-    push!(canvas, click)
-    signal_connect(click, "pressed") do _ctrl, _n, x, y
-        # Bei entschiedener Partie sind keine Züge mehr möglich.
-        state.winner === nothing || return
-        # Welche Kante wurde angeklickt?
-        i = _edge_at(state.graph, pos, x, y)
-        i == 0 && return                                 # daneben geklickt
-        e = state.graph.edges[i]
-        e.state == :neutral || return                    # bereits belegte Kante
-        # Zug des aktuellen Spielers ausführen und Anzeige aktualisieren.
-        make_move!(state, e)
+    signal_connect(btn_rand, "clicked") do _ctrl
+        n = rand(5:9)
+        m = rand(n-1:n*(n-1)÷2)    # einfacher zusammenhängender graph hat mind n-1 kanten und max n*(n-1)/2 kanten
+        g = random_graph(n, m)
+        empty!(pos)
+        merge!(pos, _circular_layout(g))    # merge damit wir pos verändern und nicht neue lokale variable erstellen
+        state = new_game(deepcopy(g))
         refresh!()
     end
 
-    # ── Fenster anzeigen und Ereignisschleife starten ───────────────────────
-    _setup_only && return win        # Testhaken: nur Aufbau prüfen, nicht öffnen
-    show(win)
-    Gtk4.start_main_loop()
-    # Beim nicht-interaktiven Start blockieren, bis das Fenster geschlossen wird.
-    if !isinteractive()
-        done = Channel{Nothing}(1)
-        signal_connect(win, "close-request") do _
-            isopen(done) && put!(done, nothing)
-            return false
-        end
-        take!(done)
+    click = GtkGestureClick()
+    push!(canvas, click)        # click überwacht clicks auf canvas
+    signal_connect(click, "pressed") do _ctrl, _n, x, y     #erste zwei übergebene: objekt und anzahl clicks irrelevant, (x,y) korrdinaten
+        state.winner === nothing || return                  # wenn schon gewinner verlasse sofort 
+        i = _edge_at(state.graph, pos, x, y)                # gucke nach nächster kante an click
+        i == 0 && return                                    # falls keine kante in toleranzgrenze verlasse
+        e = state.graph.edges[i]                            
+        e.state == :neutral || return                       # falls geklickte kante belegt mache nichts
+        make_move!(state, e)                                # mach den move und aktualisier 
+        refresh!()
     end
+
+    show(win)       # macht fenster sichtbar
+    Gtk4.start_main_loop()  # fenster bleibt offen und wartet auf ereignisse, programm läuft bis fenster geschlossen wird
 end

@@ -1,16 +1,12 @@
-# Ausführen aus dem Projektordner:
-#   julia --project=. test/runtests.jl
 
 using Test
 using Random
 
 include("../src/game.jl")
 include("../src/strategy.jl")
-include("../src/WT19_submission.jl")   # gewichtete Wettbewerbsstrategie
+include("../src/submission.jl")   
 include("../src/demo.jl")
 
-# Kleiner Helfer: ein "Diamant"-Graph s-a-b-t wie in der Aufgaben-PDF.
-#   Knoten 1=s, 2=a, 3=b, 4=t ; Kanten s-a, a-t, s-b, b-t
 function diamond_graph()
     v = [Vertex(i) for i in 1:4]
     e = [Edge(1, v[1], v[2], 0.0, :neutral),
@@ -20,9 +16,7 @@ function diamond_graph()
     return GameGraph(v, e, v[1], v[4])
 end
 
-# GameState bauen, OHNE die Kantenzustände zurückzusetzen (anders als new_game).
-# Praktisch, um check_winner mit von Hand gesetzten Zuständen zu prüfen.
-mkstate(g) = GameState(g, :short, Tuple{Symbol,Edge}[], nothing)
+mkstate(g) = GameState(g, :short, Tuple{Symbol,Edge}[], nothing) # baut gamestate ohne kantenzustände zurückzusetzen 
 
 @testset "Shannon-Switching-Spiel" begin
 
@@ -57,13 +51,13 @@ mkstate(g) = GameState(g, :short, Tuple{Symbol,Edge}[], nothing)
     end
 
     @testset "check_winner" begin
-        # Short gewinnt: s-a und a-t gehören Short -> durchgehender Weg.
+        # short gewinnt
         g = diamond_graph()
         g.edges[1].state = :short
         g.edges[2].state = :short
         @test check_winner(mkstate(g)) == :short
 
-        # Cut gewinnt: beide Wege unterbrochen.
+        # cut gewinnt
         g2 = diamond_graph()
         g2.edges[1].state = :cut      # s-a weg
         g2.edges[4].state = :cut      # b-t weg

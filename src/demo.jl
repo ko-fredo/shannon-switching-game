@@ -13,6 +13,8 @@ function example_graph()::GameGraph
              (1, 3), (3, 5), (2, 5), (1, 4)]     
     edges = [Edge(i, vertices[a], vertices[b], 0.0, :neutral)
              for (i, (a, b)) in enumerate(paare)]
+    #print("EDGES:", edges)
+    #print("VERTICES:", vertices)
     return GameGraph(vertices, edges, vertices[1], vertices[5])
 end
 
@@ -60,8 +62,7 @@ gegen weighted_cut. Jeder Zug und sein Gewicht werden ausgegeben, am Ende der
 Wert des günstigsten s-t-Wegs, den Short erreicht hat (= Shorts Punktzahl;
 kleiner ist besser).
 """
-function demo_weighted(; n::Int = 6, m::Int = 9, seed::Int = 1)
-    #Random.seed!(seed)                              # reproduzierbar für die Vorführung
+function demo_weighted(; n::Int = 6, m::Int = 9)
     state = new_game(random_graph(n, m; weighted = true))
     println("Demo: gewichtete Heuristiken ($n Knoten, $m Kanten), random_graph")
 
