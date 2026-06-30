@@ -58,29 +58,9 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
     return weg
 end
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TEIL 1 der Short-Strategie: "Habe ich noch eine Gewinnstellung?"
-#
-# Grundidee (Satz von Lehman): Short kann das Spiel sicher gewinnen, wenn der
-# Graph (genauer: ein Teil davon, der s und t enthält) ZWEI Spannbäume besitzt,
-# die sich keine neutrale Kante teilen. Anschaulich: Short hat dann zwei
-# voneinander unabhängige "Reserve-Verbindungen". Egal welche Kante Cut entfernt,
-# Short kann mit der jeweils anderen reparieren.
-#
-# Diese zwei kantendisjunkten Spannbäume berechnen wir GENAU mit dem Verfahren
-# aus Anhang A der Aufgaben-PDF:
-#   * maximally_distant_trees!   – Algorithmus 3 (Kishi-Kajitani)
-#   * augment_along_common_chord! – Algorithmus 4 (Augmentierung)
-# Man startet mit zwei beliebigen Spannbäumen und erhöht ihren "Abstand"
-# |T1\T2| Schritt für Schritt, bis er maximal ist. Besitzt der Graph zwei
-# kantendisjunkte Spannbäume, kommen am Ende genau solche heraus.
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Baut einen Spannbaum (Menge von Kanten-Indizes) per Union-Find auf.
-# Rückgabe: die Kantenmenge, oder `nothing`, falls der Graph nicht zusammenhängt.
+# Baut Spannbaum auf, Gibt Set von Kanten zurück oder nothing
 function _spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
-    nodes = union_find([(i, [i]) for i in 1:n])
+    nodes = union_find([(i,[i]) for i in 1:n])
     tree  = Set{Int}()
     for (i, (u, v)) in enumerate(kantenliste)
         if find_set!(nodes[u]).value != find_set!(nodes[v]).value
