@@ -1,21 +1,8 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# Shannon-Switching-Spiel – Optimale Strategie für Short (klassisches Spiel)
-# TU Berlin, CoMa II, SoSe 2026
-#
-#   short_strategy – optimale Strategie für Short im ungewichteten Spiel
-#
-# Kern der Strategie sind zwei kantendisjunkte Spannbäume, berechnet mit dem
-# Verfahren aus Anhang A der PDF (maximally_distant_trees! = Kishi-Kajitani,
-# augment_along_common_chord! = Augmentierung entlang einer gemeinsamen Sehne).
-#
-# Hinweis: Eine optimale Cut-Strategie für das klassische Spiel ist laut Aufgabe
-# nicht verpflichtend und wird hier bewusst NICHT implementiert. Die Heuristiken
-# für das GEWICHTETE Spiel (weighted_short/weighted_cut, TEAM_NAME) stehen in der
-# eigenständigen Wettbewerbsdatei WT19_submission.jl.
-#
-# Voraussetzung: Die Datenstrukturen (Vertex, Edge, GameGraph, GameState) sowie
-# valid_moves, path_exists und adjacency_list sind in game.jl definiert.
-# ═══════════════════════════════════════════════════════════════════════════════
+```
+Strategie für Short Spiel
+find_path 
+
+```
 
 include("union_find.jl")
 
@@ -59,17 +46,21 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
 end
 
 # Baut Spannbaum auf, Gibt Set von Kanten zurück oder nothing
-function _spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
-    nodes = union_find([(i,[i]) for i in 1:n])
+function spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
+    nodes = union_find([(i,[i]) for i in 1:n]) # jeder knoten einzelner baum
     tree  = Set{Int}()
-    for (i, (u, v)) in enumerate(kantenliste)
-        if find_set!(nodes[u]).value != find_set!(nodes[v]).value
-            union!(nodes[u], nodes[v])
+    for (i, (u, v)) in enumerate(kantenliste) # iteriert über kanten in reihenfolge
+        if find_set!(nodes[u]).value != find_set!(nodes[v]).value # checken ob kantenenden im gleichen baum sind und Pfadkompression
+            union!(nodes[u], nodes[v]) 
             push!(tree, i)
         end
     end
-    return length(tree) == n - 1 ? tree : nothing
-end
+    if length(tree) == n - 1 # checken ob alles richtig
+        return tree 
+    else 
+        return nothing 
+    end
+end 
 
 # Fundamentalkreis FC(chord, tree): Fügt man die Sehne `chord` zum Spannbaum
 # `tree` hinzu, entsteht genau ein Kreis. Zurückgegeben werden die BAUMKANTEN
@@ -188,9 +179,9 @@ end
 # Kante übrig, ist die Antwort ja.
 function _has_two_disjoint_spanning_trees(n, edgelist)::Bool
     n <= 1 && return true
-    T1 = _spanning_tree(n, edgelist)
+    T1 = spanning_tree(n, edgelist)
     T1 === nothing && return false                          # nicht zusammenhängend
-    T2 = _spanning_tree(n, edgelist)
+    T2 = spanning_tree(n, edgelist)
     maximally_distant_trees!(T1, T2, edgelist, n)
     return isempty(intersect(T1, T2))
 end
