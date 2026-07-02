@@ -110,11 +110,7 @@ function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n,
     
     k = 1 # counter für schicht
     while !isempty(schicht) # beschränkt durch n-1
-        if andererbaum = isodd(k) 
-            T2 
-        else 
-            T1
-        end
+        andererbaum = isodd(k) ? T2 : T1
         f = 0
         for c in schicht # beschränkt durch n-1
             if c in andererbaum
@@ -144,7 +140,7 @@ function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n,
         for g in schicht
             for neue_kante in fundamental_cycle(andererbaum, kantenliste, n, g)
                 if neue_kante ∉ entdeckt
-                    push!(entdeckt, neue_kante); par[fp] = g; push!(naechste, neue_kante)
+                    push!(entdeckt, neue_kante); par[neue_kante] = g; push!(naechste, neue_kante)
                 end
             end
         end
@@ -161,7 +157,7 @@ function maximally_distant_trees!(T1::Set{Int}, T2::Set{Int}, edgelist, n)
         changed = false #bricht ab wenn nix mehr ändert
         for e in 1:length(edgelist)
             if e ∉ T1 && e ∉ T2         #gemeinsame Sehne
-                augment_along_common_chord!(T1, T2, edgelist, n, e) && changed = true # abbruch verhindern
+                augment_along_common_chord!(T1, T2, edgelist, n, e) && (changed = true) # abbruch verhindern
             end
         end
     end
