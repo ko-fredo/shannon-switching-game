@@ -1,11 +1,8 @@
 ```
 Strategie für Short Spiel
-find_path 
-spanning_tree(basiert auf union_find)
+
 ```
-
 include("union_find.jl")
-
 
 ```
 Findet Weg zwischen from und to mittels breitensuche. Ausgabe: Liste von besuchten Kanten
