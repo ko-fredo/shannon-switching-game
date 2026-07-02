@@ -13,12 +13,12 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
     besucht    = Set{Int}([from])
     queue      = Int[from]
     # BFS
-    while !isempty(queue)
+    while !isempty(queue) # beschränkt durch knotenanzahl
         u = popfirst!(queue)
         if u == to 
             break
         end     
-        for (v, kante) in adj[u]
+        for (v, kante) in adj[u] # insgesamt beschränkt durch kantenanzahl
             if v ∉ besucht
                 push!(besucht, v)
                 vorgaenger[v] = (u, kante)
@@ -46,7 +46,7 @@ end
 function spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
     nodes = union_find([(i,[i]) for i in 1:n]) # jeder knoten einzelner baum
     tree  = Set{Int}()
-    for (i, (u, v)) in enumerate(kantenliste) # iteriert über kanten in reihenfolge
+    for (i, (u, v)) in enumerate(kantenliste) # iteriert über kanten in reihenfolge, beschränkt durch kantenanzahl
         if find_set!(nodes[u]).value != find_set!(nodes[v]).value # checken ob kantenenden im gleichen baum sind und Pfadkompression
             union!(nodes[u], nodes[v]) 
             push!(tree, i)
@@ -63,7 +63,7 @@ end
 function fundamental_cycle(tree::Set{Int}, kantenliste::Vector{Tuple{Int,Int}}, n, chord::Int)::Vector{Int}
     a, b = kantenliste[chord]  
     adj = [Tuple{Int,Int}[] for _ in 1:n] #Vector{Vector{Tuple{Int,Int}}}
-    for i in tree
+    for i in tree # beschränkt durch kanten
         (u, v) = kantenliste[i]
         push!(adj[u], (v, i))
         push!(adj[v], (u, i))
@@ -73,12 +73,12 @@ function fundamental_cycle(tree::Set{Int}, kantenliste::Vector{Tuple{Int,Int}}, 
     prev = Dict{Int,Tuple{Int,Int}}()
     seen = falses(n); seen[a] = true
     queue = [a]
-    while !isempty(queue)
+    while !isempty(queue) # beschränkt durch knoten
         x = popfirst!(queue)
         if x == b 
             break
         end
-        for (y, i) in adj[x]
+        for (y, i) in adj[x] # beschränkt durch kantenanzahl
             if !seen[y]
                 seen[y] = true
                 prev[y] = (x, i)
@@ -104,19 +104,19 @@ function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n,
     par = Dict{Int,Int}()                 # Zu jeder Kante vorgänger, eindeutig wegen BFS
     entdeckt = Set{Int}()                 # besuchte Kanten
     schicht = Int[]                       # Schicht 1 erstellen 
-    for f in fundamental_cycle(T1, kantenliste, n, e)
+    for f in fundamental_cycle(T1, kantenliste, n, e) # beschränkt durch knotenanzahl, n-1+1
         push!(schicht, f); push!(entdeckt, f)
     end
     
     k = 1 # counter für schicht
-    while !isempty(schicht)
+    while !isempty(schicht) # beschränkt durch n-1
         if andererbaum = isodd(k) 
             T2 
         else 
             T1
         end
         f = 0
-        for c in schicht
+        for c in schicht # beschränkt durch n-1
             if c in andererbaum
                 f = c; break
             end
@@ -125,11 +125,11 @@ function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n,
         if f != 0  #Kette von f über die Vorgänger rekonstruieren
             chain = Int[f]
             x = f
-            while haskey(par, x) 
+            while haskey(par, x)  #beschränkt durch n-1
                 x = par[x]; pushfirst!(chain, x)
             end
             push!(T1, e) # Tausch entlang der Kette wechseln die Kanten abwechselnd den Baum.
-            for (i, c) in enumerate(chain)
+            for (i, c) in enumerate(chain) # 
                 if isodd(i)
                     delete!(T1, c); push!(T2, c)
                 else
