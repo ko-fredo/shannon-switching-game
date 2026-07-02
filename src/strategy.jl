@@ -1,13 +1,13 @@
 ```
 Strategie für Short Spiel
-
+n Knotenanzahl, m Kantenanzahl
 ```
 include("union_find.jl")
 
 ```
 Findet Weg zwischen from und to mittels breitensuche. Ausgabe: Liste von besuchten Kanten
 ```
-function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{Int}
+function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{Int} #(O(n^2 +m))
     adj = adjacency_list(g, allowed)            # adjacency list gibt adj_nodes = Dict{Int, Vector{Tuple{Int,Int}}}() zurück
     vorgaenger = Dict{Int,Tuple{Int,Int}}()     
     besucht    = Set{Int}([from])
@@ -43,7 +43,7 @@ function find_path(g::GameGraph, from::Int, to::Int, allowed::Function)::Vector{
 end
 
 # Baut Spannbaum auf, Gibt Set von Kanten zurück oder nothing
-function spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing}
+function spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{Int},Nothing} #O(m)
     nodes = union_find([(i,[i]) for i in 1:n]) # jeder knoten einzelner baum
     tree  = Set{Int}()
     for (i, (u, v)) in enumerate(kantenliste) # iteriert über kanten in reihenfolge, beschränkt durch kantenanzahl
@@ -60,7 +60,7 @@ function spanning_tree(n::Int, kantenliste::Vector{Tuple{Int,Int}} )::Union{Set{
 end 
 
 # Gibt Vector{Int}} zurück mit Kantenindizes aus tree
-function fundamental_cycle(tree::Set{Int}, kantenliste::Vector{Tuple{Int,Int}}, n, chord::Int)::Vector{Int}
+function fundamental_cycle(tree::Set{Int}, kantenliste::Vector{Tuple{Int,Int}}, n, chord::Int)::Vector{Int} #O(n^2)
     a, b = kantenliste[chord]  
     adj = [Tuple{Int,Int}[] for _ in 1:n] #Vector{Vector{Tuple{Int,Int}}}
     for i in tree # beschränkt durch kanten
@@ -100,7 +100,7 @@ function fundamental_cycle(tree::Set{Int}, kantenliste::Vector{Tuple{Int,Int}}, 
 end
 
 #Augmentierung, e geimeinsame Sehne, Rückgabe Bool, verändert Spannbäume
-function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n, e::Int)
+function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n, e::Int) #O(n^3)
     par = Dict{Int,Int}()                 # Zu jeder Kante vorgänger, eindeutig wegen BFS
     entdeckt = Set{Int}()                 # besuchte Kanten
     schicht = Int[]                       # Schicht 1 erstellen 
@@ -151,7 +151,7 @@ function augment_along_common_chord!(T1::Set{Int}, T2::Set{Int}, kantenliste, n,
 end
 
 #Maximal distante Spannbäume, 
-function maximally_distant_trees!(T1::Set{Int}, T2::Set{Int}, edgelist, n)
+function maximally_distant_trees!(T1::Set{Int}, T2::Set{Int}, edgelist, n) #O(mn^4)
     changed = true
     while changed == true # muss wiederholen weil bäume und Kreise sich ändern. maximal n-1 Iterationen
         changed = false #bricht ab wenn nix mehr ändert
@@ -165,7 +165,7 @@ function maximally_distant_trees!(T1::Set{Int}, T2::Set{Int}, edgelist, n)
 end
 
 # prüft ob disjunkte spann bäume, gibt nur wahr oder falsch aber ändert und erstellt  Bäume
-function _has_two_disjoint_spanning_trees(n, edgelist)::Bool
+function _has_two_disjoint_spanning_trees(n, edgelist)::Bool  #O(mn^4)
     n <= 1 && return true
     T1 = spanning_tree(n, edgelist)
     T1 === nothing && return false #kann spannbaum erstellt werden?
@@ -175,7 +175,7 @@ function _has_two_disjoint_spanning_trees(n, edgelist)::Bool
 end
 
 # Verschmilzt alle Short-Kanten Rückgabe: Anzahl zusammenhangselemente von short(Int), und repof funktion
-function _contract_short(g::GameGraph)
+function _contract_short(g::GameGraph) #O(m+n)
     n = maximum(v.id for v in g.vertices)
     nodes = union_find([(i, [i]) for i in 1:n]) # in zusammenhangselemente unterteilen, dictionary
     for e in g.edges
@@ -197,7 +197,7 @@ function _contract_short(g::GameGraph)
 end
 
 # Rückgabe: (Anzahl Zusammenhangsknoten mit mehr als einem Knoten, Liste neutraler Kanten, s-Repräsentanten-Nummer, t-Repräsentanten-Nummer).
-function _contracted_neutral(g::GameGraph)
+function _contracted_neutral(g::GameGraph) #O(m+n)
     N, repof = _contract_short(g)
     sN, tN   = repof(g.s.id), repof(g.t.id)
     kanten   = [(repof(e.u.id), repof(e.v.id)) for e in g.edges
@@ -206,7 +206,7 @@ function _contracted_neutral(g::GameGraph)
 end
 
 # Grad, Anzahl freier Nachbarkanten zu lebenden Knoten, von Knoten v 
-function _degree(edgelist, alive, v)
+function _degree(edgelist, alive, v )# O(m)
     d = 0
     for (u, w) in edgelist
         d += (alive[u] && alive[w] && (u == v || w == v)) ? 1 : 0
@@ -222,10 +222,8 @@ function _alive_has_two_trees(N, edgelist, alive)
     return _has_two_disjoint_spanning_trees(k, kanten)
 end
 
-# Lehman-Test: Gibt es eine Knotenmenge mit s und t, auf der zwei kantendisjunkte
-# Spannbäume existieren? Vorgehen: Knoten, die offensichtlich nicht helfen können
-# (Grad < 2), nach und nach entfernen und dann (per Kishi-Kajitani) prüfen.
-function _two_tree_connected(N, edgelist, s, t)
+# Gibt es eine Knotenmenge mit zwei disjunkten Spannbäumen
+function _two_tree_connected(N, edgelist, s, t) #O(mn^5)
     s == t && return true
     alive = trues(N)
 
@@ -259,10 +257,10 @@ function _two_tree_connected(N, edgelist, s, t)
 end
 
 # Gewinnt Short wenn als nächstes cut zieht:: Bool
-_short_wins_as_second(g) = _two_tree_connected(_contracted_neutral(g)...) #Funktionsdefinition... entpackt Tupel in einzelne ELemente
+_short_wins_as_second(g) = _two_tree_connected(_contracted_neutral(g)...) #Funktionsdefinition... entpackt Tupel in einzelne ELemente, O(mn^5)
 
 # gewinnt short mit e direkt? ::Bool
-function _completes_short_path(g::GameGraph, e::Edge)
+function _completes_short_path(g::GameGraph, e::Edge) #O(n^2 +m)
     e.state == :neutral || return false
     e.state = :short
     result  = path_exists(g, g.s.id, g.t.id, zustand -> zustand == :short) # allowed wenn zusatnd = short
@@ -274,12 +272,12 @@ function short_strategy(state::GameState)::Edge
     g, zuege = state.graph, valid_moves(state)
     isempty(zuege) && error("short_strategy: keine Züge möglich")
     # Sofortgewinn?
-    for e in zuege
+    for e in zuege  # O(m(n^2+m))
         _completes_short_path(g, e) && return e
     end
 
     # Zug suchen, der die Gewinnstellung erhält.
-    for e in zuege
+    for e in zuege #O(m^2n^5
         e.state = :short                 # Zug versuchsweise ausführen
         gut = _short_wins_as_second(g)
         e.state = :neutral               # 
@@ -287,7 +285,7 @@ function short_strategy(state::GameState)::Edge
     end
 
     # neutrale Kante auf einem s-t-Weg, sonst irgendeine Kante
-    for i in find_path(g, g.s.id, g.t.id, s -> s == :neutral || s == :short)
+    for i in find_path(g, g.s.id, g.t.id, s -> s == :neutral || s == :short) #O(n^2 +m)
         g.edges[i].state == :neutral && return g.edges[i]
     end
     return first(zuege)
