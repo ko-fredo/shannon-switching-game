@@ -52,9 +52,9 @@ end
 """
     make_move!(state::GameState, e::Edge) -> Nothing
 
-F¨uhrt den Zug des aktuellen Spielers
-auf Kante e aus: Short setzt e.state = :short, Cut setzt e.state = :cut. Aktualisiert
-history, wechselt den aktiven Spieler und pr¨uft die Gewinnbedingung.
+Führt den Zug des aktuellen Spielers auf Kante `e` aus: Short setzt
+`e.state = :short`, Cut setzt `e.state = :cut`. Aktualisiert `history`,
+wechselt den aktiven Spieler und prüft die Gewinnbedingung.
 """
 function make_move!(state::GameState, e::Edge)::Nothing
     if e.state != :neutral
@@ -90,8 +90,9 @@ end
 """
     check_winner(state::GameState) -> Union{Symbol, Nothing}
 
-Gibt :short zur¨uck, falls Shorts beanspruchte Kanten einen s-t-Weg umfassen; gibt :cut zur¨uck, falls im verbleibenden Gra-
-phen kein s-t-Weg mehr existiert; sonst nothing.
+Gibt `:short` zurück, falls Shorts beanspruchte Kanten einen s-t-Weg
+umfassen; `:cut`, falls im verbleibenden Graphen kein s-t-Weg mehr
+existiert; sonst `nothing`.
 """
 function check_winner(state::GameState)::Union{Symbol, Nothing}
     g = state.graph

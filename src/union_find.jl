@@ -1,3 +1,7 @@
+# Union-Find-Datenstruktur mit vollständiger Pfadkompression.
+
+import Base: union!   # union! wird für Node erweitert, nicht überschattet
+
 mutable struct Node
     value::Int
     parent::Union{Node,Nothing}
@@ -6,9 +10,9 @@ end
 """
     union_find(data::Vector{Tuple{Int, Vector{Int}}})::Dict{Int, Node}
 
-gibt ein Dictionary von Int zu Node zuruck, dass die Bäume der Union-Find Datenstruktur
-speichert. Jedes Tupel besteht aus dem Repr¨asentanten i und der Liste aller Elemente seiner
-Komponente; der Repr¨asentant muss in seiner eigenen Liste enthalten sein.
+gibt ein Dictionary von Int zu Node zurück, das die Bäume der Union-Find Datenstruktur
+speichert. Jedes Tupel besteht aus dem Repräsentanten i und der Liste aller Elemente seiner
+Komponente; der Repräsentant muss in seiner eigenen Liste enthalten sein.
 
 # Beispiel
 ```julia
@@ -20,7 +24,6 @@ Dict{Int64, Node} with 9 entries:
   ...
 ```
 """
-
 function union_find(data::Vector{Tuple{Int,Vector{Int}}})::Dict{Int,Node}
     nodes = Dict{Int,Node}() # legt dictionary an
 
@@ -48,7 +51,6 @@ julia> find_set(nodes[5])
 Node(4, nothing)
 ```
 """
-
 function find_set(node::Node)::Node
     while node.parent !== nothing # klettert baum so lange hoch bis knoten ohne eltern gefunden wird
         node = node.parent
@@ -61,11 +63,11 @@ end
     find_set!(node::Node)::Node
 
 Gibt den Wurzelknoten des Baumes zurück, in dem sich node befindet.
-Wendet vollständige Pfadkompression 
+Wendet vollständige Pfadkompression an.
 
-Bei der vollst¨andigen Pfadkompression werden alle Knoten auf dem
-Pfad von node zur Wurzel so umgeh¨angt, dass sie direkt auf die Wurzel zeigen.
-Dadurch werden sp¨atere Anfragen deutlich schneller
+Bei der vollständigen Pfadkompression werden alle Knoten auf dem
+Pfad von node zur Wurzel so umgehängt, dass sie direkt auf die Wurzel zeigen.
+Dadurch werden spätere Anfragen deutlich schneller.
 
 # Beispiel
 ```julia
@@ -76,7 +78,6 @@ julia> leaf.parent === root
 true
 ```
 """
-
 function find_set!(node::Node)::Node
     root = find_set(node) # gibt wurzel zurück
     
@@ -103,7 +104,6 @@ Dict{Int64, Node} with 9 entries:
 ...
 ```
 """
-
 function union!(node1::Node, node2::Node)::Nothing
     root_1 = find_set!(node1) # wurzel der beiden bäume bestimmen
     root_2 = find_set!(node2)
@@ -133,7 +133,6 @@ Dict{Int64, Node} with 10 entries:
 ...
 ```
 """
-
 function add!(nodes::Dict{Int,Node}, value::Int)::Nothing
     if value in keys(nodes) # guckt ob wert schon im dict ist
         throw(AssertionError("The element $value is already in the partition"))

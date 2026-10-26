@@ -1,3 +1,2 @@
-﻿.claude/
-src/strategy.jl
-src/union_find.jl
+.claude/
+Manifest.toml

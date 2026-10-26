@@ -4,8 +4,6 @@
     example_graph() -> GameGraph
 
 Ein kleiner fester Beispielgraph auf 5 Knoten (s = 1, t = 5).
-
-Bild in Notizbuch (Ben)
 """
 function example_graph()::GameGraph
     vertices = [Vertex(i) for i in 1:5]
@@ -13,8 +11,6 @@ function example_graph()::GameGraph
              (1, 3), (3, 5), (2, 5), (1, 4)]     
     edges = [Edge(i, vertices[a], vertices[b], 0.0, :neutral)
              for (i, (a, b)) in enumerate(paare)]
-    #print("EDGES:", edges)
-    #print("VERTICES:", vertices)
     return GameGraph(vertices, edges, vertices[1], vertices[5])
 end
 
@@ -49,7 +45,7 @@ function demo_short()
     if state.winner == :short
         println("Short hat gewonnen!")
     elseif state.winner == :cut
-        println("Upsi das wafr wohl nicht so gut. Cut hat gewonnen.")
+        println("Cut hat gewonnen.")
     end
     return state
 end
@@ -84,7 +80,7 @@ function demo_weighted(; n::Int = 6, m::Int = 9)
     weg = find_path(g, g.s.id, g.t.id, s -> s == :short)
     println()
     if isempty(weg) && g.s.id != g.t.id
-        println("Short hat keine Verbindung geschafft. Blöd")
+        println("Short hat keine Verbindung geschafft.")
     else
         kosten = sum(g.edges[i].weight for i in weg; init = 0.0) # summe aller gewichte der kanten von short
         println("Short hat s und t verbunden.")
