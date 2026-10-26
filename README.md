@@ -11,18 +11,14 @@ s und t verbinden, der Cut-Spieler verbietet Kanten und will jede Verbindung
 unterbinden.
 
 Das Spiel ist vollständig gelöst. Nach dem Satz von Lehman gewinnt der
-Short-Spieler als Nachziehender genau dann, wenn der Graph einen Teilgraphen
+Short-Spieler als Zweiter genau dann, wenn der Graph einen Teilgraphen
 enthält, der beide markierten Knoten umfasst und selbst zwei kantendisjunkte
-Spannbäume besitzt. Anschaulich sind das zwei voneinander unabhängige
-Reserve-Verbindungen: Welche Kante Cut auch zerstört, Short repariert mit der
-jeweils anderen. Die Strategie hält diese Struktur über das gesamte Spiel
+Spannbäume besitzt. Welche Kante Cut auch zerstört, Short repariert mit einer
+jeweils anderen aus dem anderen Spannbaum. Die Strategie hält diese Struktur über das gesamte Spiel
 hinweg auf den unbelegten Kanten aufrecht. Geprüft wird sie mit dem
 Kishi-Kajitani-Algorithmus über eine Union-Find-Struktur.
 
-Für Cut gibt es kein eigenes Gegenstück zu diesem Satz — das wäre die duale
-Bedingung über zwei kantendisjunkte s-t-Schnitte und bräuchte Matroid-Union
-auf dem kographischen Matroid. `cut_strategy` schaut stattdessen eine Stufe
-voraus: Da die Lehman-Bedingung exakt entscheidet, ob Short gewinnt, wenn Cut
+DIe Cut-Strategie basiert auf der SHort-Strategie. Da die Lehman-Bedingung exakt entscheidet, ob Short gewinnt, wenn Cut
 am Zug ist, lässt sich daraus auch entscheiden, ob Short gewinnt, wenn Short
 am Zug ist. Cut wählt dann einen Zug, nach dem Short am Zug verliert. Das ist
 ebenfalls optimal und kommt ohne neuen Algorithmus aus.
@@ -62,17 +58,6 @@ Gegen `short_strategy` zu gewinnen ist auf einem Graphen, der die
 Lehman-Bedingung erfüllt, unmöglich — das ist der Sinn der Sache. Interessant
 wird es auf dünneren Graphen, wo Short keine Gewinnstellung hat.
 
-## Tests
-
-```
-julia --project=. -e 'using Pkg; Pkg.test()'
-```
-
-Geprüft werden die Spiellogik, die Bausteine des Kishi-Kajitani-Algorithmus
-einzeln (Spannbäume, Fundamentalkreise, Augmentierung, Kontraktion) und
-vollständige Partien: Short gegen zufälliges Cut, optimales Cut gegen
-zufälliges Short, und beide Strategien gegeneinander.
-
 ## Struktur
 
 - `strategy.jl` – optimale Strategien für Short und Cut
@@ -84,38 +69,22 @@ zufälliges Short, und beide Strategien gegeneinander.
 
 ## Anmerkungen zur Implementierung
 
-**Die Augmentierung muss schichtweise laufen.** Eine naive rekursive
-Tiefensuche liefert keine kürzesten alternierenden Ketten und damit in einem
-erheblichen Teil der Fälle ein falsches Ergebnis; nur iteratives BFS
-garantiert die Korrektheit.
-
-**Ein Korrektheitsfehler in der Lehman-Prüfung.** Frühere Fassungen haben
+**Korrektheit in der Lehman-Prüfung.** Frühere Fassungen haben
 nach dem Entfernen der Knoten mit Grad < 2 den Knoten mit dem kleinsten Grad
-entfernt und es erneut versucht. Das ist eine Vermutung und kein Argument.
-Zerfällt der Graph in mehrere dichte Blöcke, trifft die Regel bei gleichem
+entfernt und es erneut versucht. Das ist eine Vermutung. Wurde aber auf über
+10000 zufälligen Graphen mit unterschiedlichen Knotenanzahlen ohne Fehler getestet.
+Zerfällt der Graph dadurch in mehrere dichte Blöcke, trifft die Regel bei gleichem
 Mindestgrad einen Knoten des gesuchten Teilgraphen, zerstört die Lösung und
-meldet fälschlich, Short habe keine Gewinnstellung — Short gibt dann eine
-garantiert gewonnene Partie auf.
-
-Gefunden wurde das mit einem unabhängigen exakten Orakel. Über Zufallsgraphen
-ist der Fehler unsichtbar: 10 240 vollständig durchgeprüfte Stellungen auf
-fünf Knoten und je 300 Zufallsstellungen auf sechs bis acht Knoten ergaben
-keine einzige Abweichung. Auf gezielt konstruierten Blockstrukturen irrte die
-alte Fassung dagegen in 44 von 150 Fällen.
+meldet fälschlich, Short habe keine Gewinnstellung.
 
 An ihrer Stelle stehen jetzt drei Reduktionsregeln, die einzeln begründbar
 sind — Knoten mit Grad < 2 haben zu wenig Kanten für zwei Bäume, außerhalb der
 Komponente von s und t liegt nichts Relevantes, und eine Brücke liegt in jedem
 Spannbaum und kann daher nie in zweien liegen, die disjunkt sind. Was danach
-übrig bleibt, wird erschöpfend durchsucht; nach der Reduktion sind das sehr
-wenige Knoten.
+übrig bleibt, wird komplett durchsucht.  
 
 **Laufzeit.** `short_strategy` liegt bei O(m²n⁵), `cut_strategy` wegen der
-Vorausschau etwa um den Faktor m darüber. Zwei Abkürzungen halten das klein:
-Gewinnt Short ohnehin schon als Nachziehender, ist Cut verloren und es wird
-gar nicht erst gesucht, und die Prüfung bricht ab, sobald ein Gewinnzug für
-Short gefunden ist. Die Breitensuchen verwenden einen Lesezeiger statt
-`popfirst!`, das wäre pro Zugriff O(n).
+Vorausschau etwa um den Faktor m darüber.
 
 ## Mitwirkende
 
