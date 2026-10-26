@@ -18,7 +18,7 @@ jeweils anderen aus dem anderen Spannbaum. Die Strategie hält diese Struktur ü
 hinweg auf den unbelegten Kanten aufrecht. Geprüft wird sie mit dem
 Kishi-Kajitani-Algorithmus über eine Union-Find-Struktur.
 
-DIe Cut-Strategie basiert auf der SHort-Strategie. Da die Lehman-Bedingung exakt entscheidet, ob Short gewinnt, wenn Cut
+Die Cut-Strategie basiert auf der Short-Strategie. Da die Lehman-Bedingung exakt entscheidet, ob Short gewinnt, wenn Cut
 am Zug ist, lässt sich daraus auch entscheiden, ob Short gewinnt, wenn Short
 am Zug ist. Cut wählt dann einen Zug, nach dem Short am Zug verliert. Das ist
 ebenfalls optimal und kommt ohne neuen Algorithmus aus.
