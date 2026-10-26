@@ -68,6 +68,13 @@ const P4   = [(1,2),(2,3),(3,4)]                                       # Baum: n
 const E6   = [(1,2),(1,5),(1,6),(2,5),(2,6),(3,4),(3,5),(3,6),(4,6),(5,6)]  # 2 EDST: ja
 const EXP  = [(1,2),(2,3),(3,4),(4,5),(1,3),(3,5),(2,5),(1,4)]         # example_graph
 
+# Block A: besitzt zwei kantendisjunkte Spannbäume, und s = 1 und t = 5 sind
+# darin NICHT benachbart — Short gewinnt also, aber nicht im ersten Zug.
+const BLOCK_A   = [(1,2),(1,3),(1,4),(2,4),(2,5),(3,4),(3,5),(4,5)]
+const K4_HINTEN = [(6,7),(6,8),(6,9),(7,8),(7,9),(8,9)]
+const A_PLUS_K4 = vcat(BLOCK_A, K4_HINTEN)                  # zweiter Block, unverbunden
+const A_BRUECKE = vcat(BLOCK_A, [(5,6)], K4_HINTEN)         # zweiter Block über eine Brücke
+
 @testset "Shannon Switching Game" begin
 
     @testset "new_game" begin
@@ -356,6 +363,111 @@ const EXP  = [(1,2),(2,3),(3,4),(4,5),(1,3),(3,5),(2,5),(1,4)]         # example
                 make_move!(state, e)
             end
             @test state.winner == :short
+        end
+    end
+
+    # ───────────────────────────────────────────────────────────────────────────
+    # Regression: Graphen, die in mehrere dichte Blöcke zerfallen.
+    #
+    # Block A enthält s und t und besitzt zwei kantendisjunkte Spannbäume.
+    # Hängt man einen zweiten dichten Block an — unverbunden oder über eine
+    # Brücke —, ändert das an Block A nichts, Short gewinnt weiterhin.
+    #
+    # Eine frühere Fassung entfernte an dieser Stelle den Knoten mit dem
+    # kleinsten Grad und versuchte es erneut. Haben beide Blöcke denselben
+    # Mindestgrad, trifft das einen Knoten aus Block A, zerstört die Lösung und
+    # meldet fälschlich, Short habe keine Gewinnstellung. Zufallsgraphen sehen
+    # praktisch nie so aus, deshalb blieb das lange unentdeckt.
+    # ───────────────────────────────────────────────────────────────────────────
+    @testset "Blockstrukturen" begin
+        @test _two_tree_connected(5, BLOCK_A,   1, 5) == true
+        @test _two_tree_connected(9, A_PLUS_K4, 1, 5) == true
+        @test _two_tree_connected(9, A_BRUECKE, 1, 5) == true
+
+        # Zwei K4 über eine Brücke: die Brücke selbst kann nie dazugehören.
+        zwei_k4 = vcat(K4, [(4,5)], [(a + 4, b + 4) for (a, b) in K4])
+        @test _two_tree_connected(8, zwei_k4, 1, 3) == true
+
+        # Und in der Partie: Short muss gewinnen, egal wie Cut spielt.
+        for seed in 1:5
+            Random.seed!(seed)
+            state = new_game(mach_graph(9, A_PLUS_K4; s = 1, t = 5))
+            while state.winner === nothing && !isempty(valid_moves(state))
+                e = state.current_player == :short ? short_strategy(state) :
+                                                     rand(valid_moves(state))
+                make_move!(state, e)
+            end
+            @test state.winner == :short
+        end
+    end
+
+    # ───────────────────────────────────────────────────────────────────────────
+    @testset "cut_strategy: Einzelzug" begin
+        # Sofortgewinn: auf einem Weg trennt jede Kante s von t.
+        g = mach_graph(3, [(1,2),(2,3)]; s = 1, t = 3)
+        state = GameState(g, :cut, Tuple{Symbol,Edge}[], nothing)
+        make_move!(state, cut_strategy(state))
+        @test state.winner == :cut
+
+        # Rückgabe ist eine neutrale Kante; kein Zustand wird verändert.
+        g2 = mach_graph(5, EXP)
+        state2 = new_game(g2)
+        make_move!(state2, g2.edges[1])             # Short zieht, dann ist Cut dran
+        @test state2.current_player == :cut
+        vorher = [x.state for x in g2.edges]
+        e2 = cut_strategy(state2)
+        @test e2.state == :neutral
+        @test [x.state for x in g2.edges] == vorher
+    end
+
+    # ───────────────────────────────────────────────────────────────────────────
+    @testset "cut_strategy gewinnt das Cut-Spiel" begin
+        # Der Fünferkreis mit s = 1 und t = 3 ist ein Cut-Spiel: Cut gewinnt,
+        # egal wer beginnt. Mit optimalem Cut darf also keine Partie verloren
+        # gehen, wie auch immer Short spielt.
+        for seed in 1:15
+            Random.seed!(seed)
+            state = new_game(mach_graph(5, C5; s = 1, t = 3))
+            while state.winner === nothing && !isempty(valid_moves(state))
+                e = state.current_player == :cut ? cut_strategy(state) :
+                                                   rand(valid_moves(state))
+                make_move!(state, e)
+            end
+            @test state.winner == :cut
+        end
+    end
+
+    # ───────────────────────────────────────────────────────────────────────────
+    @testset "beide Strategien gegeneinander" begin
+        # Spielen beide Seiten fehlerfrei, hängt der Ausgang nur am Graphen:
+        # Short-Spiel -> Short gewinnt, Cut-Spiel -> Cut gewinnt.
+        for (paare, n, s, t, erwartet) in ((EXP, 5, 1, 5, :short),
+                                           (K4,  4, 1, 4, :short),
+                                           (C5,  5, 1, 3, :cut),
+                                           ([(1,2),(2,3)], 3, 1, 3, :cut))
+            state = new_game(mach_graph(n, paare; s = s, t = t))
+            while state.winner === nothing && !isempty(valid_moves(state))
+                e = state.current_player == :short ? short_strategy(state) :
+                                                     cut_strategy(state)
+                make_move!(state, e)
+            end
+            @test state.winner == erwartet
+        end
+    end
+
+    # ───────────────────────────────────────────────────────────────────────────
+    @testset "spielgraph" begin
+        for seed in 1:20
+            Random.seed!(seed)
+            g = spielgraph()
+            n = length(g.vertices)
+            @test 5 <= n <= 7
+            @test length(g.edges) > n - 1                 # nie ein Baum
+            @test all(e.state == :neutral for e in g.edges)
+            @test path_exists(g, g.s.id, g.t.id, z -> z == :neutral)   # zusammenhängend
+            # s und t sind nie benachbart
+            @test !any((e.u.id == g.s.id && e.v.id == g.t.id) ||
+                       (e.u.id == g.t.id && e.v.id == g.s.id) for e in g.edges)
         end
     end
 end

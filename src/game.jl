@@ -112,49 +112,49 @@ end
 
 # Hilfsfunktionen
 
-function adjacency_list(g::GameGraph, allowed::Function)
-    adj_nodes = Dict{Int, Vector{Tuple{Int,Int}}}()
-    for nodes in g.vertices               # leere liste für alle knoten
-        adj_nodes[nodes.id] = Tuple{Int,Int}[]
+# Adjazenzliste über die Kanten, deren Zustand `allowed` erfüllt:
+# Knoten-id -> [(Nachbar, Kantenindex)]. Ein Vector statt eines Dict, weil
+# die Knoten von 1 bis n durchnummeriert sind — spart Hashing und eine
+# Dictionary-Allokation pro Aufruf, und die Funktion liegt im heißen Pfad.
+function adjacency_list(g::GameGraph, allowed::Function)   # O(n+m)
+    nmax = 0
+    for v in g.vertices
+        v.id > nmax && (nmax = v.id)
     end
 
-    for (edge_id, edge) in enumerate(g.edges)       # geht alle kanten durch
-        if allowed(edge.state)                      # fragt ab ob state der edge short ist oder short und neutral (is_short und is_neurtal_or_short)
-            push!(adj_nodes[edge.u.id], (edge.v.id, edge_id))       
-            push!(adj_nodes[edge.v.id], (edge.u.id, edge_id))
+    adj = [Tuple{Int,Int}[] for _ in 1:nmax]
+    for (edge_id, edge) in enumerate(g.edges)
+        if allowed(edge.state)
+            push!(adj[edge.u.id], (edge.v.id, edge_id))
+            push!(adj[edge.v.id], (edge.u.id, edge_id))
         end
     end
-    return adj_nodes
+    return adj
 end
 
-function path_exists(g::GameGraph, x::Int, y::Int, allowed::Function)::Bool
-    if x==y
-        return true
-    end
+function path_exists(g::GameGraph, x::Int, y::Int, allowed::Function)::Bool   # O(n+m)
+    x == y && return true
 
-    adj_nodes = adjacency_list(g, allowed)  #dict von adjacent knoten für BFS
+    adj = adjacency_list(g, allowed)
+    n = length(adj)
 
-    # basically BFS identisch zur Vorlesung und vorheriger PA
-    visited = Set{Int}()
-    push!(visited, x)
-    queue = Int[x]
+    # Breitensuche mit Lesezeiger statt popfirst!, das wäre pro Zugriff O(n).
+    besucht = falses(n); besucht[x] = true
+    queue = Vector{Int}(undef, n); queue[1] = x
+    kopf, ende = 1, 1
 
-    while !isempty(queue)
-        current = popfirst!(queue)      # erstes element aus queue
-
-        for (adj_node, node_id) in adj_nodes[current] # geht alle nachbarn von knoten durch
-            if adj_node == y        # guckt ob zielknoten y gefunden wurde
-                return true
-            end
-
-            if adj_node ∉ visited # nicht besuchte in queue 
-                push!(visited, adj_node)
-                push!(queue, adj_node)
+    while kopf <= ende
+        current = queue[kopf]; kopf += 1
+        for (nachbar, _) in adj[current]
+            nachbar == y && return true     # Zielknoten gefunden
+            if !besucht[nachbar]
+                besucht[nachbar] = true
+                ende += 1; queue[ende] = nachbar
             end
         end
     end
 
-    return false # wenn y nie gefunden wird gibt es keinen weg
+    return false    # y nie erreicht, also gibt es keinen Weg
 end
 
 function is_short(state::Symbol)::Bool
@@ -201,4 +201,66 @@ function random_graph(n::Int, m::Int; weighted::Bool=false)::GameGraph
     end
 
     return GameGraph(vertices, edges, vertices[1], vertices[n])
+end
+
+"""
+    spielgraph(; n = rand(5:7), weighted = false) -> GameGraph
+
+Zufallsgraph, auf dem sich eine Partie lohnt. `random_graph` darf alles von
+einem Baum bis zum vollständigen Graphen liefern; beides ergibt keine
+Partie: Auf einem Baum gewinnt Cut mit dem ersten beliebigen Zug auf dem
+einzigen Weg, und sind s und t benachbart, gewinnt Short sofort im ersten
+Zug.
+
+Dieser Erzeuger garantiert deshalb: s und t sind nie benachbart, es ist nie
+ein Baum, und die Knotenzahl bleibt klein genug, dass die Bots flüssig
+ziehen.
+"""
+function spielgraph(; n::Int = rand(5:7), weighted::Bool = false)::GameGraph
+    n >= 4 || throw(ArgumentError("spielgraph: es werden mindestens 4 Knoten benötigt"))
+    s, t = 1, n
+
+    # Alle Kanten außer s-t.
+    moeglich = Tuple{Int,Int}[(a, b) for a in 1:n for b in (a + 1):n
+                              if !(a == s && b == t)]
+    untere = n + 2                                   # mehr als ein Baum
+    obere  = min(length(moeglich), 3 * n)
+    m = rand(untere:max(untere, obere))
+
+    vertices = [Vertex(i) for i in 1:n]
+    nextweight() = weighted ? round(1.0 + 9.0 * rand(); digits = 2) : 0.0
+
+    # Zufälliger Spannbaum über eine gemischte Kantenreihenfolge sichert den
+    # Zusammenhang, ohne dass s-t gebraucht wird.
+    reihenfolge = shuffle(moeglich)
+    eltern = collect(1:n)
+    function wurzel(a::Int)
+        while eltern[a] != a
+            eltern[a] = eltern[eltern[a]]
+            a = eltern[a]
+        end
+        return a
+    end
+
+    gewaehlt = Tuple{Int,Int}[]
+    for (a, b) in reihenfolge
+        ra, rb = wurzel(a), wurzel(b)
+        if ra != rb
+            eltern[ra] = rb
+            push!(gewaehlt, (a, b))
+        end
+    end
+
+    # Mit weiteren Kanten auffüllen, bis m erreicht ist.
+    drin = Set(gewaehlt)
+    for kante in reihenfolge
+        length(gewaehlt) >= m && break
+        if kante ∉ drin
+            push!(drin, kante); push!(gewaehlt, kante)
+        end
+    end
+
+    edges = [Edge(i, vertices[a], vertices[b], nextweight(), :neutral)
+             for (i, (a, b)) in enumerate(gewaehlt)]
+    return GameGraph(vertices, edges, vertices[s], vertices[t])
 end

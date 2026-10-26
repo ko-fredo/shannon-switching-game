@@ -51,6 +51,39 @@ function demo_short()
 end
 
 """
+    demo_bots(graph = spielgraph())
+
+Lässt beide optimalen Strategien gegeneinander antreten und gibt jeden Zug
+aus. Wer gewinnt, entscheidet allein der Graph: Erfüllt er die Bedingung des
+Satzes von Lehman, gewinnt Short, sonst Cut. Beide Seiten spielen fehlerfrei,
+also ist das Ergebnis bei gleichem Graphen immer dasselbe.
+"""
+function demo_bots(graph::GameGraph = spielgraph())
+    state = new_game(deepcopy(graph))
+    println("Demo: optimale Short-Strategie gegen optimale Cut-Strategie")
+    println("Graph: $(length(state.graph.vertices)) Knoten, ",
+            "$(length(state.graph.edges)) Kanten, ",
+            "s = $(state.graph.s.id), t = $(state.graph.t.id)\n")
+
+    zug = 0
+    while state.winner === nothing && !isempty(valid_moves(state))
+        zug += 1
+        if state.current_player == :short
+            e = short_strategy(state)
+            println("Zug $zug – Short sichert  $(_edge_label(e))")
+        else
+            e = cut_strategy(state)
+            println("Zug $zug – Cut  entfernt $(_edge_label(e))")
+        end
+        make_move!(state, e)
+    end
+
+    println()
+    println(state.winner == :short ? "Short hat gewonnen." : "Cut hat gewonnen.")
+    return state
+end
+
+"""
     demo_weighted(; n = 6, m = 9, seed = 1)
 
 Spielt eine Partie auf einem zufälligen GEWICHTETEN Graphen: weighted_short
